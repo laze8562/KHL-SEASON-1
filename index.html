@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#04060a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="КХЛ S1">
+  <title>КХЛ SEASON 1</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand" id="brand">КХЛ <b>S1</b></div>
+    <nav id="nav">
+      <button data-view="home" class="on">Главная</button>
+      <button data-view="schedule">Расписание</button>
+      <button data-view="table">Турнирная таблица</button>
+      <button data-view="clubs">Клубы</button>
+      <button data-view="media">Медиа</button>
+    </nav>
+    <button class="gear" id="gear" aria-label="Настройки">⚙</button>
+  </header>
+
+  <main>
+    <section id="home" class="view on">
+      <div class="hero">
+        <h1 id="leagueName"></h1>
+        <p id="leagueSub"></p>
+      </div>
+      <h2>Лидеры конференций</h2>
+      <p class="hint">Топ-3 по очкам · нажмите, чтобы открыть полную таблицу</p>
+      <div id="leaders" class="two"></div>
+      <h2>Ближайший матч любимого клуба</h2>
+      <div id="nextMatch" class="card"></div>
+      <h2>Последние новости</h2>
+      <p class="hint">4 самые свежие публикации из раздела «Медиа»</p>
+      <div id="homeNews" class="grid"></div>
+    </section>
+
+    <section id="schedule" class="view">
+      <h2>Расписание</h2>
+      <p class="hint">Регулярный чемпионат и плей-офф</p>
+      <div class="tabs" id="schStage">
+        <button data-v="regular" class="on">Регулярка</button>
+        <button data-v="playoff">Плей-офф</button>
+      </div>
+      <div class="tabs small" id="schWhen">
+        <button data-v="past" class="on">Прошедшие</button>
+        <button data-v="future">Будущие</button>
+      </div>
+      <div id="schList"></div>
+    </section>
+
+    <section id="table" class="view">
+      <h2>Турнирная таблица</h2>
+      <p class="hint">Регулярный чемпионат и сетка плей-офф</p>
+      <div class="tabs" id="tabStage">
+        <button data-v="regular" class="on">Регулярка</button>
+        <button data-v="playoff">Плей-офф</button>
+      </div>
+      <div id="tableBody"></div>
+    </section>
+
+    <section id="clubs" class="view">
+      <h2>Клубы</h2>
+      <p class="hint">Нажмите на клуб, чтобы посмотреть подробную информацию</p>
+      <div class="two" id="clubsBody"></div>
+    </section>
+
+    <section id="media" class="view">
+      <h2>Медиа</h2>
+      <p class="hint">Новости и объявления лиги</p>
+      <div id="mediaBody" class="grid"></div>
+    </section>
+  </main>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <button class="close" id="close">✕</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
