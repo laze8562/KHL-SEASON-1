@@ -9,35 +9,73 @@ const LEAGUE = {
   ]
 };
 
-// conf: "west" | "east"; color — акцентный цвет клуба
+// Логотипы: положите файл <id>.png в папку LOGO_DIR (например ska.png, cska.png).
+// Если файла нет, показывается цветной кружок с сокращением.
+// Если загружаете файлы с телефона прямо в корень репозитория, поставьте LOGO_DIR = "".
+const LOGO_DIR = "img/";
+
+// conf: "west" | "east"; div — дивизион; color — акцентный цвет клуба
 const TEAMS = [
-  // ЗАПАД (11)
-  { id: "ska", name: "СКА", short: "СКА", city: "Санкт-Петербург", arena: "Ледовый дворец", conf: "west", color: "#c8102e", titles: [] },
-  { id: "cska", name: "ЦСКА", short: "ЦСК", city: "Москва", arena: "ЦСКА Арена", conf: "west", color: "#d4202c", titles: [] },
-  { id: "dyn", name: "Динамо Москва", short: "ДИН", city: "Москва", arena: "ВТБ Арена", conf: "west", color: "#2a6ede", titles: [] },
-  { id: "spa", name: "Спартак", short: "СПА", city: "Москва", arena: "Мегаспорт", conf: "west", color: "#e3262e", titles: [] },
-  { id: "lok", name: "Локомотив", short: "ЛОК", city: "Ярославль", arena: "Арена 2000", conf: "west", color: "#e11b22", titles: [] },
-  { id: "tor", name: "Торпедо", short: "ТОР", city: "Нижний Новгород", arena: "Нагорный", conf: "west", color: "#1f9d55", titles: [] },
-  { id: "sev", name: "Северсталь", short: "СЕВ", city: "Череповец", arena: "Ледовый дворец", conf: "west", color: "#28a0d8", titles: [] },
-  { id: "soc", name: "Сочи", short: "СОЧ", city: "Сочи", arena: "Большой", conf: "west", color: "#1d7bd6", titles: [] },
-  { id: "dmn", name: "Динамо Минск", short: "ДМН", city: "Минск", arena: "Минск-Арена", conf: "west", color: "#2f6fd1", titles: [] },
-  { id: "vit", name: "Витязь", short: "ВИТ", city: "Москва", arena: "Платинум Арена", conf: "west", color: "#e0a000", titles: [] },
-  { id: "lad", name: "Лада", short: "ЛАД", city: "Тольятти", arena: "Лада-Арена", conf: "west", color: "#d4392b", titles: [] },
-  // ВОСТОК (11)
-  { id: "akb", name: "Ак Барс", short: "АКБ", city: "Казань", arena: "Татнефть Арена", conf: "east", color: "#1a9a5a", titles: [] },
-  { id: "sal", name: "Салават Юлаев", short: "САЛ", city: "Уфа", arena: "Уфа-Арена", conf: "east", color: "#1b8fd2", titles: [] },
-  { id: "mmg", name: "Металлург", short: "МГН", city: "Магнитогорск", arena: "Арена Металлург", conf: "east", color: "#2c7be5", titles: [] },
-  { id: "ava", name: "Авангард", short: "АВА", city: "Омск", arena: "Арена Омск", conf: "east", color: "#e5352b", titles: [] },
-  { id: "tra", name: "Трактор", short: "ТРА", city: "Челябинск", arena: "Трактор Арена", conf: "east", color: "#e8d000", titles: [] },
-  { id: "avt", name: "Автомобилист", short: "АВТ", city: "Екатеринбург", arena: "КРК Уралец", conf: "east", color: "#e6b800", titles: [] },
-  { id: "nef", name: "Нефтехимик", short: "НЕФ", city: "Нижнекамск", arena: "Нефтехимик Арена", conf: "east", color: "#e2762b", titles: [] },
-  { id: "sib", name: "Сибирь", short: "СИБ", city: "Новосибирск", arena: "Сибирь-Арена", conf: "east", color: "#2a8ee0", titles: [] },
-  { id: "amu", name: "Амур", short: "АМУ", city: "Хабаровск", arena: "Платинум Арена", conf: "east", color: "#e07a1f", titles: [] },
-  { id: "adm", name: "Адмирал", short: "АДМ", city: "Владивосток", arena: "Фетисов Арена", conf: "east", color: "#1f6fd1", titles: [] },
-  { id: "bar", name: "Барыс", short: "БАР", city: "Астана", arena: "Барыс Арена", conf: "east", color: "#1aa0c8", titles: [] }
+  // ЗАПАД — Дивизион Боброва
+  { id: "lad", name: "Лада", short: "ЛАД", city: "Тольятти", arena: "Лада-Арена", conf: "west", div: "Дивизион Боброва", color: "#2a6ede", titles: [] },
+  { id: "ska", name: "СКА", short: "СКА", city: "Санкт-Петербург", arena: "Ледовый дворец", conf: "west", div: "Дивизион Боброва", color: "#c8102e", titles: [] },
+  { id: "spa", name: "Спартак", short: "СПА", city: "Москва", arena: "Мегаспорт", conf: "west", div: "Дивизион Боброва", color: "#e3262e", titles: [] },
+  { id: "tor", name: "Торпедо", short: "ТОР", city: "Нижний Новгород", arena: "Нагорный", conf: "west", div: "Дивизион Боброва", color: "#c81e5a", titles: [] },
+  { id: "soc", name: "ХК Сочи", short: "СОЧ", city: "Сочи", arena: "Большой", conf: "west", div: "Дивизион Боброва", color: "#e0a000", titles: [] },
+  // ЗАПАД — Дивизион Тарасова
+  { id: "dyn", name: "Динамо М", short: "ДИН", city: "Москва", arena: "ВТБ Арена", conf: "west", div: "Дивизион Тарасова", color: "#2a6ede", titles: [] },
+  { id: "dmn", name: "Динамо Мн", short: "ДМН", city: "Минск", arena: "Минск-Арена", conf: "west", div: "Дивизион Тарасова", color: "#2aa5d8", titles: [] },
+  { id: "dra", name: "Драконы", short: "ДРА", city: "Шанхай", arena: "—", conf: "west", div: "Дивизион Тарасова", color: "#e8761f", titles: [] },
+  { id: "lok", name: "Локомотив", short: "ЛОК", city: "Ярославль", arena: "Арена 2000", conf: "west", div: "Дивизион Тарасова", color: "#e11b22", titles: [] },
+  { id: "sev", name: "Северсталь", short: "СЕВ", city: "Череповец", arena: "Ледовый дворец", conf: "west", div: "Дивизион Тарасова", color: "#e8c000", titles: [] },
+  { id: "cska", name: "ЦСКА", short: "ЦСК", city: "Москва", arena: "ЦСКА Арена", conf: "west", div: "Дивизион Тарасова", color: "#d4202c", titles: [] },
+  // ВОСТОК — Дивизион Харламова
+  { id: "avt", name: "Автомобилист", short: "АВТ", city: "Екатеринбург", arena: "КРК Уралец", conf: "east", div: "Дивизион Харламова", color: "#d4202c", titles: [] },
+  { id: "akb", name: "Ак Барс", short: "АКБ", city: "Казань", arena: "Татнефть Арена", conf: "east", div: "Дивизион Харламова", color: "#1a9a5a", titles: [] },
+  { id: "mmg", name: "Металлург Мг", short: "МГН", city: "Магнитогорск", arena: "Арена Металлург", conf: "east", div: "Дивизион Харламова", color: "#e0a800", titles: [] },
+  { id: "nef", name: "Нефтехимик", short: "НЕФ", city: "Нижнекамск", arena: "Нефтехимик Арена", conf: "east", div: "Дивизион Харламова", color: "#2a8ee0", titles: [] },
+  { id: "tra", name: "Трактор", short: "ТРА", city: "Челябинск", arena: "Трактор Арена", conf: "east", div: "Дивизион Харламова", color: "#7a8494", titles: [] },
+  // ВОСТОК — Дивизион Чернышева
+  { id: "ava", name: "Авангард", short: "АВА", city: "Омск", arena: "Арена Омск", conf: "east", div: "Дивизион Чернышева", color: "#e5352b", titles: [] },
+  { id: "adm", name: "Адмирал", short: "АДМ", city: "Владивосток", arena: "Фетисов Арена", conf: "east", div: "Дивизион Чернышева", color: "#1f6fd1", titles: [] },
+  { id: "amu", name: "Амур", short: "АМУ", city: "Хабаровск", arena: "Платинум Арена", conf: "east", div: "Дивизион Чернышева", color: "#e07a1f", titles: [] },
+  { id: "bar", name: "Барыс", short: "БАР", city: "Астана", arena: "Барыс Арена", conf: "east", div: "Дивизион Чернышева", color: "#1aa0c8", titles: [] },
+  { id: "sal", name: "Салават Юлаев", short: "САЛ", city: "Уфа", arena: "Уфа-Арена", conf: "east", div: "Дивизион Чернышева", color: "#1b8fd2", titles: [] },
+  { id: "sib", name: "Сибирь", short: "СИБ", city: "Новосибирск", arena: "Сибирь-Арена", conf: "east", div: "Дивизион Чернышева", color: "#2a8ee0", titles: [] }
 ];
 
-// Матч: M(дата, время, хозяева, гости, голы хозяев, голы гостей, овертайм/буллиты?, стадия)
+// ТУРНИРНАЯ ТАБЛИЦА (вписана вручную по вашим скриншотам). Порядок строк = места.
+// Формат: [id клуба, игры, победы (В), победы в овертайме (ВО), очки]
+const STANDINGS = {
+  west: [
+    ["lok", 20, 13, 2, 30],
+    ["cska", 20, 13, 0, 30],
+    ["spa", 21, 12, 0, 28],
+    ["tor", 20, 9, 0, 27],
+    ["sev", 22, 10, 1, 26],
+    ["dra", 19, 9, 2, 26],
+    ["dmn", 21, 7, 1, 22],
+    ["dyn", 23, 3, 2, 21],
+    ["ska", 19, 6, 2, 19],
+    ["soc", 20, 5, 1, 12],
+    ["lad", 21, 2, 1, 11]
+  ],
+  east: [
+    ["mmg", 23, 13, 3, 36],
+    ["bar", 21, 10, 1, 25],
+    ["nef", 21, 10, 1, 25],
+    ["akb", 22, 6, 3, 24],
+    ["amu", 21, 11, 0, 23],
+    ["avt", 21, 9, 0, 22],
+    ["sal", 21, 8, 1, 21],
+    ["adm", 21, 6, 2, 21],
+    ["ava", 19, 5, 4, 21],
+    ["sib", 22, 7, 0, 19],
+    ["tra", 20, 6, 2, 18]
+  ]
+};
+
+// Матч: M(дата, время, хозяева, гости, голы хозяев, голы гостей, овертайм?, стадия)
 // Будущий матч: не указывайте голы -> M("2026-11-08","19:00","ska","cska")
 function M(date, time, home, away, hs = null, as = null, ot = false, stage = "regular") {
   return { date, time, home, away, hs, as, ot, stage };
@@ -53,7 +91,7 @@ const MATCHES = [
   M("2026-09-07", "18:30", "mmg", "ava", 2, 1, true),
   M("2026-09-08", "19:00", "tra", "avt", 3, 4),
   M("2026-09-08", "20:00", "nef", "sib", 0, 2),
-  M("2026-09-10", "19:00", "dmn", "vit", 3, 1),
+  M("2026-09-10", "19:00", "dmn", "dra", 3, 1),
   M("2026-09-10", "19:30", "lad", "ska", 1, 4),
   M("2026-09-12", "18:00", "amu", "adm", 2, 3, true),
   M("2026-09-12", "19:00", "bar", "akb", 1, 3),
@@ -67,13 +105,13 @@ const MATCHES = [
   M("2026-11-12", "19:00", "spa", "tor"),
   M("2026-11-12", "18:30", "bar", "adm"),
   M("2026-11-15", "19:00", "sal", "tra"),
-  M("2026-11-15", "19:30", "vit", "soc")
+  M("2026-11-15", "19:30", "dra", "soc")
 ];
 
 // Новости (новые сверху определяются по дате)
 const NEWS = [
   { date: "2026-10-30", title: "Открытие Season 1", text: "Стартует первый сезон Континентальной Хоккейной Лиги: 22 клуба, две конференции." },
-  { date: "2026-10-28", title: "Регламент сезона", text: "Победа в основное время — 3 очка, в овертайме — 2, поражение в овертайме — 1. В плей-офф выходят 8 лучших клубов каждой конференции." },
+  { date: "2026-10-28", title: "Регламент сезона", text: "В плей-офф выходят 8 лучших клубов каждой конференции." },
   { date: "2026-10-25", title: "Жеребьёвка календаря", text: "Календарь регулярного чемпионата опубликован в разделе «Расписание»." },
   { date: "2026-10-20", title: "Заявки клубов приняты", text: "Все 22 клуба подтвердили участие в первом сезоне." }
 ];

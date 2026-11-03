@@ -8,13 +8,18 @@ const ui = { schStage: "regular", schWhen: "past", tabStage: "regular" };
 const save = () => localStorage.setItem("khl-s1", JSON.stringify(state));
 
 const badge = (t, big) => t
-  ? `<span class="badge${big ? " big" : ""}" style="background:${t.color}">${t.short}</span>`
+  ? `<span class="badge${big ? " big" : ""}" style="background:${t.color}"><b>${t.short}</b><img src="${LOGO_DIR}${t.id}.png" alt="" onload="this.parentNode.classList.add('logo')" onerror="this.remove()"></span>`
   : `<span class="badge" style="background:#2a3345">?</span>`;
 const tmHtml = (t, right) => `<div class="tm${right ? " r" : ""}">${right ? "" : badge(t)}<span>${t ? t.name : "Определится"}</span>${right ? badge(t) : ""}</div>`;
 const fmtDate = d => new Date(d + "T00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 
 // ---------- Расчёт таблицы ----------
 function standings(conf) {
+  // таблица берётся из STANDINGS в data.js (вручную)
+  return STANDINGS[conf].map(([id, gp, w, otw, pts]) => ({ t: T(id), gp, w, otw, pts }));
+}
+// запасной вариант: автоматический расчёт по матчам (сейчас не используется)
+function standingsCalc(conf) {
   const rows = TEAMS.filter(t => t.conf === conf).map(t => ({ t, gp: 0, w: 0, otw: 0, otl: 0, l: 0, gf: 0, ga: 0, pts: 0 }));
   const get = id => rows.find(r => r.t.id === id);
   MATCHES.filter(m => m.stage === "regular" && m.hs !== null).forEach(m => {
@@ -90,8 +95,8 @@ function renderSchedule() {
 function standingsTable(conf) {
   const rows = standings(conf);
   return `<div class="box"><h3>${CONF[conf]}</h3><div class="tw"><table>
-    <tr><th>#</th><th class="l">Клуб</th><th>И</th><th>В</th><th>ВО</th><th>ПО</th><th>П</th><th>Ш</th><th>О</th></tr>
-    ${rows.map((r, i) => `<tr class="${i < 8 ? "po" : ""}"><td>${i + 1}</td><td class="l">${r.t.name}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.otw}</td><td>${r.otl}</td><td>${r.l}</td><td>${r.gf}-${r.ga}</td><td><b>${r.pts}</b></td></tr>`).join("")}
+    <tr><th>Место</th><th class="l">Клуб</th><th>Игры</th><th>В</th><th>ВО</th><th>Очки</th></tr>
+    ${rows.map((r, i) => `<tr class="${i < 8 ? "po" : ""}"><td>${i + 1}</td><td class="l"><div class="tm">${badge(r.t)}<span>${r.t.name}</span></div></td><td>${r.gp}</td><td>${r.w}</td><td>${r.otw}</td><td><b>${r.pts}</b></td></tr>`).join("")}
   </table></div><p class="hint" style="margin-top:8px">Первые 8 мест — выход в плей-офф</p></div>`;
 }
 function renderTable() {
@@ -110,7 +115,10 @@ function renderTable() {
 function renderClubs() {
   $("#clubsBody").innerHTML = ["west", "east"].map(c =>
     `<div><h3 style="margin-bottom:10px;color:var(--accent)">${CONF[c]}</h3>` +
-    TEAMS.filter(t => t.conf === c).map(t => `<div class="card club clickable" data-club="${t.id}">${badge(t)}<span>${t.name}</span></div>`).join("") + `</div>`).join("");
+    [...new Set(TEAMS.filter(t => t.conf === c).map(t => t.div))].map(d =>
+      `<div class="div">${d}</div>` +
+      TEAMS.filter(t => t.conf === c && t.div === d).map(t => `<div class="card club clickable" data-club="${t.id}">${badge(t)}<span style="flex:1">${t.name}</span><small class="muted">${t.city}</small></div>`).join("")
+    ).join("") + `</div>`).join("");
 }
 function renderMedia() { $("#mediaBody").innerHTML = sortedNews().map(newsCard).join(""); }
 
@@ -124,6 +132,7 @@ function clubModal(id) {
     <div class="row"><span>Город</span><span>${t.city}</span></div>
     <div class="row"><span>Арена</span><span>${t.arena}</span></div>
     <div class="row"><span>Конференция</span><span>${CONF[t.conf]}</span></div>
+    <div class="row"><span>Дивизион</span><span>${t.div}</span></div>
     <div class="row"><span>Достижения</span><span>${t.titles.length ? t.titles.join(", ") : "Пока нет"}</span></div>`);
 }
 function pickerModal() {
