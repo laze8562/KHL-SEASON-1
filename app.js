@@ -35,7 +35,9 @@ function standingsCalc(conf) {
 
 // ---------- Сетка плей-офф ----------
 function bracket(conf) {
-  const seeds = standings(conf).slice(0, 8).map(r => r.t.id);
+  // сетка заполняется только когда в data.js вписаны 8 посеянных клубов (PLAYOFF_SEEDS)
+  const given = (typeof PLAYOFF_SEEDS !== "undefined" && PLAYOFF_SEEDS[conf]) || [];
+  const seeds = given.length === 8 ? given : Array(8).fill(null);
   let cur = [[0, 7], [3, 4], [1, 6], [2, 5]].map(([x, y]) => [seeds[x], seeds[y]]);
   const rounds = []; let winners = [];
   for (let r = 0; r < 3; r++) {
