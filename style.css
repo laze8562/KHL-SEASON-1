@@ -159,3 +159,9 @@ html, body { overflow-x: hidden; }
 .plogo b { font-size: 24px; letter-spacing: .02em; }
 .prole { margin-top: 10px; color: var(--muted); font-size: 14px; }
 .shot, .toast { display: none !important; }
+
+/* списки капитанов и тренеров */
+.news.clickable { cursor: pointer; }
+.news .more { display: inline-block; margin-top: 8px; color: var(--accent); font-size: 14px; font-weight: 600; }
+.ph { margin: 18px 0 6px; color: var(--accent); font-size: 15px; text-transform: uppercase; letter-spacing: .05em; }
+.prow { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); line-height: 1.25; }

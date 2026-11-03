@@ -65,7 +65,20 @@ function leadersBlock(conf) {
     rows.map((r, i) => `<div class="tm" style="margin:8px 0">${i + 1}. ${badge(r.t)}<span style="flex:1">${r.t.name}</span><b>${r.pts}</b></div>`).join("") + `</div>`;
 }
 function newsCard(n) {
-  return `<div class="card news"><small>${fmtDate(n.date)}</small><h4>${n.title}</h4><p>${n.text}</p></div>`;
+  const click = n.list ? ` clickable" data-list="${n.list}` : "";
+  const more = n.list ? `<span class="more">Открыть список →</span>` : "";
+  return `<div class="card news${click}"><small>${fmtDate(n.date)}</small><h4>${n.title}</h4><p>${n.text}</p>${more}</div>`;
+}
+
+const LISTS = {
+  captains: { title: "Капитаны команд", map: () => CAPTAINS },
+  coaches: { title: "Главные тренеры команд", map: () => COACHES }
+};
+function listModal(key) {
+  const L = LISTS[key], m = L.map();
+  const col = conf => `<h4 class="ph">${CONF[conf]}</h4>` + TEAMS.filter(t => t.conf === conf).map(t =>
+    `<div class="prow">${badge(t)}<span><b>${t.name}</b> — ${m[t.id] || "—"}</span></div>`).join("");
+  openModal(`<h3>${L.title}</h3><p class="hint">Сезон 2026/2027</p>${col("west")}${col("east")}`);
 }
 const sortedNews = () => [...NEWS].sort((a, b) => b.date.localeCompare(a.date));
 
@@ -207,6 +220,7 @@ $("#overlay").addEventListener("click", e => { if (e.target.id === "overlay") cl
 document.addEventListener("click", e => {
   const g = e.target.closest("[data-go]"); if (g) go(g.dataset.go);
   const c = e.target.closest("[data-club]"); if (c) clubModal(c.dataset.club);
+  const ls = e.target.closest("[data-list]"); if (ls) listModal(ls.dataset.list);
   const f = e.target.closest("[data-fav]");
   if (f) { state.fav = f.dataset.fav || null; save(); renderAll(); closeModal(); }
   if (e.target.id === "chg") pickerModal();
