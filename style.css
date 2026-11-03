@@ -99,3 +99,18 @@ td .badge { width: 26px; height: 26px; font-size: 8px; }
 /* логотипы без круглой обрезки */
 .badge.logo { border-radius: 0; overflow: visible; }
 .badge img { padding: 1px; }
+
+/* туры и дерби */
+.tourbar { display: flex; gap: 8px; align-items: center; margin: 4px 0 14px; }
+.tourbar button, .tourbar select { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--text); padding: 8px 14px; font: inherit; }
+.tourbar button { font-size: 20px; line-height: 1; }
+.tourbar select { flex: 1; max-width: 220px; }
+.match.derby { border-color: var(--accent); }
+.match .lab { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; }
+
+/* логотип лиги */
+.brand { display: block !important; }
+.brand img { height: 38px; width: auto; display: block; }
+.heroLogo { display: block; margin: 0 auto 14px; height: min(46vw, 230px); width: auto; border-radius: 14px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 560px) { .brand { display: block !important; } .brand img { height: 32px; } }

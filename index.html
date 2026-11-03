@@ -9,11 +9,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="КХЛ S1">
   <title>КХЛ SEASON 1</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="logo.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="top">
-    <div class="brand" id="brand">КХЛ <b>S1</b></div>
+    <div class="brand" id="brand"><img src="logo.png" alt="КХЛ Season 1"></div>
     <nav id="nav">
       <button data-view="home" class="on">Главная</button>
       <button data-view="schedule">Расписание</button>
@@ -27,7 +29,8 @@
   <main>
     <section id="home" class="view on">
       <div class="hero">
-        <h1 id="leagueName"></h1>
+        <img class="heroLogo" src="logo.png" alt="КХЛ Season 1">
+        <h1 id="leagueName" class="sr"></h1>
         <p id="leagueSub"></p>
       </div>
       <h2>Лидеры конференций</h2>
@@ -47,10 +50,7 @@
         <button data-v="regular" class="on">Регулярка</button>
         <button data-v="playoff">Плей-офф</button>
       </div>
-      <div class="tabs small" id="schWhen">
-        <button data-v="past" class="on">Прошедшие</button>
-        <button data-v="future">Будущие</button>
-      </div>
+      <div class="tourbar" id="tourBar"><button id="tourPrev" aria-label="Предыдущий тур">‹</button><select id="tourSel"></select><button id="tourNext" aria-label="Следующий тур">›</button></div>
       <div id="schList"></div>
     </section>
 

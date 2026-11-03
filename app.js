@@ -4,7 +4,7 @@ const CONF = { west: "Запад", east: "Восток" };
 const BASE_ACCENT = "#2f7bff";
 
 let state = JSON.parse(localStorage.getItem("khl-s1") || "{}"); // { fav: id|null, color: bool }
-const ui = { schStage: "regular", schWhen: "past", tabStage: "regular" };
+const ui = { schStage: "regular", tour: null, tabStage: "regular" };
 const save = () => localStorage.setItem("khl-s1", JSON.stringify(state));
 
 const badge = (t, big) => t
@@ -75,7 +75,7 @@ function renderHome() {
   const el = $("#nextMatch");
   if (!fav) { el.innerHTML = `<span class="hint">Выберите клуб в настройках ⚙</span>`; }
   else {
-    const m = MATCHES.filter(m => m.hs === null && (m.home === fav.id || m.away === fav.id)).sort((a, b) => a.date.localeCompare(b.date))[0];
+    const m = MATCHES.filter(m => m.hs === null && (m.home === fav.id || m.away === fav.id)).sort((a, b) => (a.tour || 0) - (b.tour || 0) || (a.date || "").localeCompare(b.date || ""))[0];
     el.innerHTML = m ? matchHtml(m) : `<span class="hint">У клуба «${fav.name}» пока нет запланированных матчей</span>`;
   }
   $("#homeNews").innerHTML = sortedNews().slice(0, 4).map(newsCard).join("");
@@ -83,12 +83,30 @@ function renderHome() {
 
 function matchHtml(m) {
   const sc = m.hs === null ? "—" : `${m.hs}:${m.as}${m.ot ? "<br><small>ОТ</small>" : ""}`;
-  return `<div class="match"><div class="d">${fmtDate(m.date)} · ${m.time}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}</div>`;
+  const when = m.date ? `${fmtDate(m.date)} · ${m.time}` : `Тур ${m.tour}`;
+  const lab = m.label ? `<div class="lab">${m.label}</div>` : "";
+  return `<div class="match${m.label ? " derby" : ""}">${lab}<div class="d">${when}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}</div>`;
 }
+const regular = () => MATCHES.filter(m => m.stage === "regular");
+const tourCount = () => Math.max(0, ...regular().map(m => m.tour || 0));
 function renderSchedule() {
-  const past = ui.schWhen === "past";
-  let list = MATCHES.filter(m => m.stage === ui.schStage && (past ? m.hs !== null : m.hs === null));
-  list.sort((a, b) => (past ? -1 : 1) * (a.date + a.time).localeCompare(b.date + b.time));
+  const bar = $("#tourBar");
+  if (ui.schStage !== "regular") {
+    bar.style.display = "none";
+    const l = MATCHES.filter(m => m.stage === ui.schStage);
+    $("#schList").innerHTML = l.length ? l.map(matchHtml).join("") : `<p class="hint">Матчей плей-офф пока нет</p>`;
+    return;
+  }
+  bar.style.display = "";
+  const n = tourCount();
+  if (ui.tour === null) {
+    const open = regular().find(m => m.hs === null);
+    ui.tour = open ? open.tour : n;
+  }
+  ui.tour = Math.min(Math.max(1, ui.tour), n || 1);
+  const sel = $("#tourSel");
+  sel.innerHTML = Array.from({ length: n }, (_, i) => `<option value="${i + 1}"${i + 1 === ui.tour ? " selected" : ""}>Тур ${i + 1}</option>`).join("");
+  const list = regular().filter(m => m.tour === ui.tour);
   $("#schList").innerHTML = list.length ? list.map(matchHtml).join("") : `<p class="hint">Матчей нет</p>`;
 }
 
@@ -171,7 +189,9 @@ function tabs(id, key, fn) {
   });
 }
 tabs("#schStage", "schStage", renderSchedule);
-tabs("#schWhen", "schWhen", renderSchedule);
+$("#tourSel").addEventListener("change", e => { ui.tour = +e.target.value; renderSchedule(); });
+$("#tourPrev").onclick = () => { ui.tour--; renderSchedule(); };
+$("#tourNext").onclick = () => { ui.tour++; renderSchedule(); };
 tabs("#tabStage", "tabStage", renderTable);
 
 $("#nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) go(b.dataset.view); });

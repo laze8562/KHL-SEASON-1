@@ -75,15 +75,297 @@ const STANDINGS = {
   ]
 };
 
-// Матч: M(дата, время, хозяева, гости, голы хозяев, голы гостей, овертайм?, стадия)
-// Будущий матч: не указывайте голы -> M("2026-11-08","19:00","ska","cska")
+// РАСПИСАНИЕ РЕГУЛЯРНОГО ЧЕМПИОНАТА (21 тур, по 11 матчей).
+// Матч: ["хозяева", "гости", "подпись (необязательно, например дерби)", "счёт (необязательно)"]
+// Не сыгран: просто не пишите счёт. Результат: ["ska", "cska", "", "3:2"]
+// Овертайм: "3:2 ОТ", буллиты: "3:2 Б". Подпись пропустить: пустые кавычки "".
+const SCHEDULE = [
+  { tour: 1, games: [
+    ["akb", "tor", "Матч Открытия КХЛ SEASON 1"],
+    ["amu", "sal"],
+    ["ava", "sev"],
+    ["bar", "spa", "Столичное Дерби"],
+    ["soc", "adm"],
+    ["nef", "dra"],
+    ["tra", "dmn"],
+    ["dyn", "lad"],
+    ["sib", "cska"],
+    ["ska", "lok"],
+    ["mmg", "avt", "Уральское Дерби"]
+  ]},
+  { tour: 2, games: [
+    ["ava", "amu"],
+    ["sal", "spa"],
+    ["adm", "sev"],
+    ["akb", "bar", "Кошачье Дерби"],
+    ["soc", "nef"],
+    ["dmn", "tor"],
+    ["lad", "dra"],
+    ["tra", "sib"],
+    ["lok", "dyn"],
+    ["avt", "cska"],
+    ["ska", "mmg"]
+  ]},
+  { tour: 3, games: [
+    ["spa", "amu"],
+    ["ava", "adm"],
+    ["sal", "akb", "Зелёное Дерби"],
+    ["nef", "sev"],
+    ["bar", "dmn", "Столичное Дерби"],
+    ["soc", "lad"],
+    ["sib", "tor"],
+    ["dra", "lok"],
+    ["tra", "avt", "Уральское Дерби"],
+    ["mmg", "dyn"],
+    ["cska", "ska", "Армейское Дерби"]
+  ]},
+  { tour: 4, games: [
+    ["adm", "amu", "Дальне-Восточное Дерби"],
+    ["akb", "spa"],
+    ["ava", "nef"],
+    ["dmn", "sal"],
+    ["lad", "sev"],
+    ["bar", "sib"],
+    ["lok", "soc"],
+    ["avt", "tor"],
+    ["dra", "mmg"],
+    ["ska", "tra"],
+    ["cska", "dyn", "Московское Дерби"]
+  ]},
+  { tour: 5, games: [
+    ["amu", "akb"],
+    ["nef", "adm"],
+    ["spa", "dmn", "Столичное Дерби"],
+    ["ava", "lad"],
+    ["sib", "sal"],
+    ["sev", "lok"],
+    ["bar", "avt"],
+    ["mmg", "soc"],
+    ["tor", "ska"],
+    ["dra", "cska"],
+    ["dyn", "tra"]
+  ]},
+  { tour: 6, games: [
+    ["amu", "nef"],
+    ["dmn", "akb"],
+    ["lad", "adm"],
+    ["spa", "sib"],
+    ["lok", "ava"],
+    ["avt", "sal", "Уральское Дерби"],
+    ["sev", "mmg"],
+    ["ska", "bar"],
+    ["cska", "soc"],
+    ["tor", "dyn"],
+    ["tra", "dra"]
+  ]},
+  { tour: 7, games: [
+    ["amu", "dmn"],
+    ["nef", "lad"],
+    ["sib", "akb"],
+    ["adm", "lok"],
+    ["spa", "avt"],
+    ["mmg", "ava"],
+    ["sal", "ska"],
+    ["sev", "cska"],
+    ["bar", "dyn", "Столичное Дерби"],
+    ["soc", "tra"],
+    ["tor", "dra"]
+  ]},
+  { tour: 8, games: [
+    ["lok", "amu"],
+    ["sib", "avt"],
+    ["mmg", "lad"],
+    ["ska", "dmn"],
+    ["nef", "cska"],
+    ["dyn", "akb"],
+    ["tra", "adm"],
+    ["spa", "dra"],
+    ["tor", "ava"],
+    ["soc", "sal"],
+    ["sev", "bar"]
+  ]},
+  { tour: 9, games: [
+    ["sib", "amu"],
+    ["lad", "lok"],
+    ["dmn", "avt"],
+    ["mmg", "nef"],
+    ["akb", "ska"],
+    ["adm", "cska"],
+    ["spa", "dyn", "Московское Дерби"],
+    ["ava", "tra"],
+    ["sal", "dra"],
+    ["tor", "sev"],
+    ["bar", "soc"]
+  ]},
+  { tour: 10, games: [
+    ["lad", "amu"],
+    ["sib", "dmn"],
+    ["nef", "lok"],
+    ["avt", "akb"],
+    ["mmg", "adm"],
+    ["spa", "ska"],
+    ["cska", "ava"],
+    ["dyn", "sal"],
+    ["sev", "tra"],
+    ["dra", "bar"],
+    ["tor", "soc"]
+  ]},
+  { tour: 11, games: [
+    ["amu", "avt"],
+    ["mmg", "lok"],
+    ["sib", "ska"],
+    ["lad", "cska"],
+    ["dmn", "dyn", "Дерби Динамо"],
+    ["nef", "tra"],
+    ["akb", "dra"],
+    ["tor", "adm"],
+    ["spa", "soc"],
+    ["ava", "bar"],
+    ["sev", "sal"]
+  ]},
+  { tour: 12, games: [
+    ["ska", "amu"],
+    ["mmg", "cska"],
+    ["avt", "dyn"],
+    ["tra", "lok"],
+    ["sib", "dra"],
+    ["lad", "tor"],
+    ["soc", "dmn"],
+    ["nef", "bar"],
+    ["akb", "sev"],
+    ["sal", "adm"],
+    ["spa", "ava"]
+  ]},
+  { tour: 13, games: [
+    ["mmg", "amu"],
+    ["ska", "avt"],
+    ["lok", "cska"],
+    ["dyn", "sib"],
+    ["tra", "lad"],
+    ["dmn", "dra"],
+    ["tor", "nef"],
+    ["soc", "akb"],
+    ["adm", "bar"],
+    ["sev", "spa"],
+    ["sal", "ava"]
+  ]},
+  { tour: 14, games: [
+    ["cska", "amu"],
+    ["ska", "dyn"],
+    ["tra", "mmg", "Уральское Дерби"],
+    ["dra", "avt"],
+    ["lok", "tor"],
+    ["soc", "sib"],
+    ["bar", "lad"],
+    ["dmn", "sev"],
+    ["sal", "nef"],
+    ["ava", "akb"],
+    ["adm", "spa"]
+  ]},
+  { tour: 15, games: [
+    ["amu", "tra"],
+    ["dra", "dyn"],
+    ["tor", "cska"],
+    ["ska", "soc"],
+    ["bar", "mmg"],
+    ["sev", "avt"],
+    ["lok", "sal"],
+    ["ava", "sib"],
+    ["spa", "lad"],
+    ["dmn", "adm"],
+    ["akb", "nef"]
+  ]},
+  { tour: 16, games: [
+    ["amu", "dyn"],
+    ["cska", "tra"],
+    ["dra", "ska"],
+    ["mmg", "tor"],
+    ["avt", "soc"],
+    ["bar", "lok"],
+    ["sib", "sev"],
+    ["lad", "sal"],
+    ["ava", "dmn"],
+    ["nef", "spa"],
+    ["akb", "adm"]
+  ]},
+  { tour: 17, games: [
+    ["amu", "dra"],
+    ["tor", "tra"],
+    ["dyn", "soc"],
+    ["cska", "bar"],
+    ["sev", "ska"],
+    ["mmg", "sal", "Уральское Дерби"],
+    ["avt", "ava"],
+    ["spa", "lok"],
+    ["sib", "adm"],
+    ["lad", "akb"],
+    ["nef", "dmn"]
+  ]},
+  { tour: 18, games: [
+    ["amu", "bar"],
+    ["sev", "soc"],
+    ["sal", "tor"],
+    ["dra", "ava"],
+    ["spa", "tra"],
+    ["adm", "dyn"],
+    ["cska", "akb"],
+    ["nef", "ska"],
+    ["dmn", "mmg"],
+    ["avt", "lad"],
+    ["sib", "lok"]
+  ]},
+  { tour: 19, games: [
+    ["amu", "soc"],
+    ["tor", "bar"],
+    ["sev", "dra"],
+    ["tra", "sal", "Уральское Дерби"],
+    ["dyn", "ava"],
+    ["cska", "spa", "Московское Дерби"],
+    ["ska", "adm"],
+    ["mmg", "akb"],
+    ["nef", "avt"],
+    ["lok", "dmn"],
+    ["sib", "lad"]
+  ]},
+  { tour: 20, games: [
+    ["tor", "amu"],
+    ["dra", "soc"],
+    ["bar", "tra"],
+    ["sev", "dyn"],
+    ["cska", "sal"],
+    ["ava", "ska"],
+    ["spa", "mmg"],
+    ["avt", "adm"],
+    ["akb", "lok"],
+    ["nef", "sib"],
+    ["lad", "dmn"]
+  ]},
+  { tour: 21, games: [
+    ["sev", "amu"],
+    ["bar", "sal"],
+    ["soc", "ava"],
+    ["spa", "tor"],
+    ["dra", "adm"],
+    ["tra", "akb"],
+    ["nef", "dyn"],
+    ["cska", "dmn", "Столичное Дерби"],
+    ["ska", "lad"],
+    ["sib", "mmg"],
+    ["avt", "lok"]
+  ]}
+];
+
 function M(date, time, home, away, hs = null, as = null, ot = false, stage = "regular") {
   return { date, time, home, away, hs, as, ot, stage };
 }
 
-const MATCHES = [
-  // Пока матчей нет. Пример: M("2026-11-08","19:00","ska","cska")
-];
+const MATCHES = [];
+SCHEDULE.forEach(t => t.games.forEach(([home, away, label, score]) => {
+  const m = { tour: t.tour, home, away, label: label || "", hs: null, as: null, ot: false, stage: "regular" };
+  const r = score && String(score).match(/^\s*(\d+)\s*[:\-]\s*(\d+)\s*(ОТ|Б)?\s*$/);
+  if (r) { m.hs = +r[1]; m.as = +r[2]; m.ot = !!r[3]; }
+  MATCHES.push(m);
+}));
 
 // Новости (новые сверху определяются по дате)
 const NEWS = [
