@@ -4,7 +4,7 @@ const LEAGUE = {
   name: "КХЛ SEASON 1",
   sub: "Континентальная Хоккейная Лига",
   socials: [
-    { t: "Телеграм", u: "https://t.me/" },   // <- вставьте свои ссылки
+    { t: "Телеграм", u: "https://t.me/khlseaso" },   // <- вставьте свои ссылки
     { t: "Тикток", u: "https://www.tiktok.com/" }
   ]
 };

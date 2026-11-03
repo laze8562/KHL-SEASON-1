@@ -129,3 +129,9 @@ html, body { overflow-x: hidden; }
   .match .badge { width: 30px; height: 30px; }
   .match .tm span { font-size: 13px; }
 }
+
+/* ссылка на телеграм в медиа */
+.tg { display: flex; align-items: center; gap: 14px; margin: 4px 0 18px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; color: var(--text); text-decoration: none; }
+.tg svg { color: var(--accent); flex: none; }
+.tg span { display: flex; flex-direction: column; }
+.tg small { color: var(--muted); }
