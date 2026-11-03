@@ -122,6 +122,8 @@ function standingsTable(conf) {
 function renderTable() {
   const el = $("#tableBody");
   if (ui.tabStage === "regular") { el.innerHTML = `<div class="two">${standingsTable("west")}${standingsTable("east")}</div>`; return; }
+  const seeded = typeof PLAYOFF_SEEDS !== "undefined" && ["west", "east"].some(c => (PLAYOFF_SEEDS[c] || []).length === 8);
+  if (!seeded) { el.innerHTML = `<p class="hint" style="margin-top:18px">Сетка плей-офф появится после завершения регулярного чемпионата.</p>`; return; }
   const names = ["1/4 финала", "1/2 финала", "Финал конф."];
   const bw = bracket("west"), be = bracket("east");
   const fin = PLAYOFF.final || {}, fa = fin.a || 0, fb = fin.b || 0;
