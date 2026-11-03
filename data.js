@@ -386,3 +386,20 @@ const PLAYOFF_SEEDS = { west: [], east: [] };
 const PLAYOFF = {
   // "west-0-0": { a: 4, b: 2 },
 };
+
+// ПАРТНЁРЫ (показываются внизу на всех вкладках).
+// file — имя файла логотипа в репозитории (PNG, лучше светлый/прозрачный фон).
+// Пока файла нет, вместо логотипа показывается название текстом.
+// Чтобы убрать блок совсем, оставьте PARTNERS = [].
+const PARTNERS = [
+  { name: "FONBET",       role: "Титульный партнёр",     file: "p-fonbet.png" },
+  { name: "СОГАЗ",        role: "Генеральный партнёр",   file: "p-sogaz.png" },
+  { name: "Т-Банк",       role: "Генеральный партнёр",   file: "p-tbank.png" },
+  { name: "МИР",          role: "Официальный партнёр",   file: "p-mir.png" },
+  { name: "Ростелеком",   role: "Партнёр",               file: "p-rostelecom.png" },
+  { name: "LADA",         role: "Партнёр",               file: "p-lada.png" },
+  { name: "Кинопоиск",    role: "Партнёр",               file: "p-kinopoisk.png" },
+  { name: "Gislaved",     role: "Партнёр",               file: "p-gislaved.png" },
+  { name: "Haier",        role: "Партнёр",               file: "p-haier.png" },
+  { name: "S7",           role: "Партнёр",               file: "p-s7.png" }
+];

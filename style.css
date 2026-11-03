@@ -135,3 +135,27 @@ html, body { overflow-x: hidden; }
 .tg svg { color: var(--accent); flex: none; }
 .tg span { display: flex; flex-direction: column; }
 .tg small { color: var(--muted); }
+
+/* ссылка на телеграм у заголовка новостей */
+.h2row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+.h2row h2 { margin-top: 0; }
+.tglink { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 14px; white-space: nowrap; }
+
+/* кнопка скриншота */
+.shot { position: fixed; right: 14px; bottom: 14px; z-index: 20; padding: 10px 16px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+.shot:disabled { opacity: .6; }
+.toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; z-index: 60; font-size: 14px; }
+
+/* вкладки: обычный flex, чтобы корректно попадали в скриншот */
+.tabs { display: flex; width: fit-content; max-width: 100%; }
+.h2row { flex-wrap: nowrap; }
+
+/* партнёры */
+#partners { max-width: 1000px; margin: 40px auto 0; padding: 28px 16px 60px; border-top: 1px solid var(--line); text-align: center; }
+#partners h3 { font-size: 18px; margin-bottom: 22px; }
+.partner { margin: 0 0 30px; }
+.plogo { height: 56px; display: flex; align-items: center; justify-content: center; }
+.plogo img { max-height: 56px; max-width: 240px; width: auto; height: auto; }
+.plogo b { font-size: 24px; letter-spacing: .02em; }
+.prole { margin-top: 10px; color: var(--muted); font-size: 14px; }
+.shot, .toast { display: none !important; }

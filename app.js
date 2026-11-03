@@ -218,3 +218,16 @@ document.addEventListener("change", e => {
 
 renderAll();
 if (state.fav === undefined) pickerModal();
+
+// ---------- Партнёры (показываются внизу на всех вкладках) ----------
+function renderPartners() {
+  const list = typeof PARTNERS !== "undefined" ? PARTNERS : [];
+  const el = $("#partners");
+  if (!list.length) { el.style.display = "none"; return; }
+  el.innerHTML = `<h3>Партнёры ${LEAGUE.name}</h3>` + list.map(p => `
+    <div class="partner">
+      <div class="plogo"><img src="${LOGO_DIR}${p.file}" alt="${p.name}" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'${p.name}'}))"></div>
+      <div class="prole">${p.role}</div>
+    </div>`).join("");
+}
+renderPartners();
