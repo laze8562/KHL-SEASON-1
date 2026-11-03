@@ -114,3 +114,18 @@ td .badge { width: 26px; height: 26px; font-size: 8px; }
 .heroLogo { display: block; margin: 0 auto 14px; height: min(46vw, 230px); width: auto; border-radius: 14px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 560px) { .brand { display: block !important; } .brand img { height: 32px; } }
+
+/* фикс: матч не вылезает из рамки */
+html, body { overflow-x: hidden; }
+#nextMatch { padding: 0; border: 0; background: none; }
+.card, .box, .match { min-width: 0; max-width: 100%; }
+.match { grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); gap: 8px; }
+.match > * { min-width: 0; }
+.match .tm { gap: 8px; }
+.match .tm span { overflow-wrap: anywhere; line-height: 1.15; font-size: 15px; }
+.match .badge { width: 34px; height: 34px; }
+@media (max-width: 560px) {
+  .match { grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr); padding: 10px 8px; gap: 6px; }
+  .match .badge { width: 30px; height: 30px; }
+  .match .tm span { font-size: 13px; }
+}
