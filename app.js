@@ -256,8 +256,10 @@ document.addEventListener("click", e => {
   if (e.target.id === "roleCoach") coachLoginModal();
   if (e.target.id === "coachBack") entryModal();
   const mk = e.target.closest("[data-mk]"); if (mk && !e.target.closest("a")) matchModal(mk.dataset.mk);
-  const ed = e.target.closest("[data-edit]"); if (ed) editorModal(ed.dataset.edit);
-  const ar = e.target.closest(".addRow"); if (ar) addEditorRows(1, ar.dataset.pos);
+  const de = e.target.closest("[data-edit]"); if (de) editorModal(de.dataset.edit);
+  const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
+  if (e.target.id === "pAdd") { const pos = $("#pRows").dataset.pos; edCollect(pos); ed.rows[pos].push({ pos, n: "", name: "", on: true, line: "" }); edPicker(pos); }
+  if (e.target.id === "pDone") { edCollect($("#pRows").dataset.pos); edMain(); }
   if (e.target.id === "eSave") saveLineup();
   if (e.target.id === "eCancel") matchModal(currentMatch);
   if (e.target.id === "eClear") clearLineup();
@@ -418,41 +420,62 @@ function knownPlayers(team) {
   Object.values(LU).filter(d => d.team === team).forEach(d => (d.players || []).forEach(p => map.set(p.name, { n: p.n, name: p.name, pos: p.pos })));
   return [...map.values()];
 }
-function addEditorRows(n, pos) { for (let i = 0; i < n; i++) document.querySelector(`#eRows [data-pos="${pos}"]`).insertAdjacentHTML("beforeend", rowHtml({ pos, on: true })); }
+// Редактор: сначала сводка и три кнопки (вратари / защитники / нападающие), каждая открывает полный список игроков команды
+let ed = null;
+function edCollect(pos) {
+  if (!ed) return;
+  const box = document.querySelector(`#pRows`); if (!box) return;
+  ed.rows[pos] = [...box.querySelectorAll(".erow")].map(r => ({ on: r.querySelector(".ck").checked, n: r.querySelector(".n").value.trim(), name: r.querySelector(".nm").value.trim(), line: r.querySelector(".ln").value, pos }));
+}
 function editorModal(key) {
   const m = MATCHES.find(x => matchKey(x) === key), my = coachTeam();
   if (!m || !my || (m.home !== my && m.away !== my)) return;
   const d = LU[`${key}__${my}`], cur = new Map((d ? d.players : []).map(p => [p.name, p]));
   const all = knownPlayers(my);
-  const groups = ["G", "D", "F"].map(pos => {
-    let list = all.filter(p => p.pos === pos).sort((a, b) => a.n - b.n).map(p => { const c = cur.get(p.name); return c ? { ...p, ...c, on: true } : { ...p, line: "" }; });
-    if (!list.length && !all.length) list = Array.from({ length: { G: 2, D: 6, F: 12 }[pos] }, () => ({ pos }));
-    return `<div class="lg">${POSN[pos]}</div><div data-pos="${pos}">${list.map(p => rowHtml({ ...p, pos })).join("")}</div><button class="btn ghost addRow" data-pos="${pos}" type="button">+ Добавить</button>`;
+  ed = { key, my, rows: { G: [], D: [], F: [] } };
+  for (const pos of ["G", "D", "F"]) {
+    ed.rows[pos] = all.filter(p => p.pos === pos).sort((a, b) => a.n - b.n).map(p => { const c = cur.get(p.name); return { pos, n: String(p.n), name: p.name, on: !!c, line: c && c.line ? String(c.line) : "" }; });
+  }
+  edMain();
+}
+function edMain() {
+  const m = MATCHES.find(x => matchKey(x) === ed.key), d = LU[`${ed.key}__${ed.my}`];
+  const blocks = ["G", "D", "F"].map(pos => {
+    const sel = ed.rows[pos].filter(p => p.on && p.name);
+    return `<button class="btn big pickbtn" data-pick="${pos}" type="button"><span>${POSN[pos]}</span><b>${sel.length} из ${ed.rows[pos].length || 0} ›</b></button>` +
+      (sel.length ? `<div class="sel">${sel.map(p => `<span><b>${esc(p.n)}</b> ${esc(splitName(p.name)[0])}</span>`).join("")}</div>` : "");
   }).join("");
-  openModal(`<h3>Состав: ${T(my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
-    <p class="hint">Отметьте галочкой игроков, которые выходят на матч, и выберите звено или пару. Нужного игрока нет в списке — нажмите «+ Добавить» в его разделе.</p>
-    <div id="eRows">${groups}</div>
+  openModal(`<h3>Состав: ${T(ed.my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
+    <p class="hint">Нажмите на раздел, чтобы выбрать игроков из списка команды.</p>
+    ${blocks}
     <div class="err" id="eMsg"></div>
     <div><button class="btn" id="eSave" type="button">Сохранить</button><button class="btn ghost" id="eCancel" type="button">Назад</button>${d ? `<button class="btn ghost" id="eClear" type="button">Очистить</button>` : ""}</div>`);
-  currentMatch = key; editing = true;
+  currentMatch = ed.key; editing = true;
+}
+function edPicker(pos) {
+  const rows = ed.rows[pos];
+  openModal(`<h3>${POSN[pos]}: ${T(ed.my).name}</h3>
+    <p class="hint">Отметьте игроков, которые выходят на матч, и выберите ${pos === "G" ? "роль" : pos === "D" ? "пару" : "звено"}.${rows.length ? "" : " Список пока пуст: добавьте игроков кнопкой ниже, дальше они будут в списке всегда."}</p>
+    <div id="pRows" data-pos="${pos}">${rows.map(p => rowHtml(p)).join("")}</div>
+    <button class="btn ghost" id="pAdd" type="button">+ Добавить игрока</button>
+    <div><button class="btn" id="pDone" type="button">Готово</button></div>`);
+  currentMatch = ed.key; editing = true;
 }
 async function saveLineup() {
   const key = currentMatch, my = coachTeam(), msg = $("#eMsg");
   const m = MATCHES.find(x => matchKey(x) === key);
-  if (!m || !my) return;
+  if (!m || !my || !ed) return;
   const players = [], nums = new Set();
-  for (const r of document.querySelectorAll("#eRows .erow")) {
-    const name = r.querySelector(".nm").value.trim(), nraw = r.querySelector(".n").value.trim();
-    if (!r.querySelector(".ck").checked || (!name && !nraw)) continue;
-    if (!name) { msg.textContent = "У одного из игроков не указана фамилия"; return; }
-    if (!/^\d{1,2}$/.test(nraw)) { msg.textContent = `Укажите номер (0–99) для «${name}»`; return; }
-    if (nums.has(+nraw)) { msg.textContent = `Номер ${nraw} указан дважды`; return; }
-    nums.add(+nraw);
-    const p = { n: +nraw, name, pos: r.parentElement.dataset.pos };
-    const ln = r.querySelector(".ln").value; if (ln) p.line = +ln;
+  for (const pos of ["G", "D", "F"]) for (const r of ed.rows[pos]) {
+    if (!r.on || (!r.name && !r.n)) continue;
+    if (!r.name) { msg.textContent = "У одного из игроков не указана фамилия"; return; }
+    if (!/^\d{1,2}$/.test(r.n)) { msg.textContent = `Укажите номер (0–99) для «${r.name}»`; return; }
+    if (nums.has(+r.n)) { msg.textContent = `Номер ${r.n} указан дважды`; return; }
+    nums.add(+r.n);
+    const p = { n: +r.n, name: r.name, pos }; if (r.line) p.line = +r.line;
     players.push(p);
   }
-  if (!players.length) { msg.textContent = "Добавьте хотя бы одного игрока"; return; }
+  if (!players.length) { msg.textContent = "Выберите хотя бы одного игрока"; return; }
   if (players.length > 30) { msg.textContent = "Не больше 30 игроков"; return; }
   const btn = $("#eSave"); btn.disabled = true; msg.textContent = "";
   try {
@@ -460,7 +483,7 @@ async function saveLineup() {
       team: my, match: key, tour: m.tour, home: m.home, away: m.away, players,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), by: Backend.user.email
     });
-    matchModal(key);
+    ed = null; matchModal(key);
   } catch (e) { btn.disabled = false; msg.textContent = "Не удалось сохранить. Проверьте интернет и что вы вошли как тренер этой команды."; }
 }
 async function clearLineup() {

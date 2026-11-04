@@ -218,3 +218,8 @@ html, body { overflow-x: hidden; }
 body.mo > *:not(#overlay):not(script) { display: none !important; }
 body.mo .overlay { position: static; min-height: 100vh; align-items: flex-start; background: var(--bg); padding: 16px; }
 body.mo .modal { max-height: none; overflow: visible; margin: 0 auto; }
+
+.pickbtn { display: flex !important; justify-content: space-between; align-items: center; text-align: left; }
+.sel { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.sel span { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); }
+.sel b { color: var(--accent); }
