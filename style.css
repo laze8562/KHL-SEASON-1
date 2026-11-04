@@ -208,3 +208,8 @@ html, body { overflow-x: hidden; }
 .pc.l { justify-content: flex-end; text-align: right; }
 .nmb { font-size: 13px; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
 .nmb b { font-weight: 600; }
+
+.erow { grid-template-columns: 30px 54px minmax(0, 1fr) !important; align-items: center; }
+.erow .ck { width: 22px; height: 22px; accent-color: var(--accent); }
+.erow .eopt { grid-column: 2 / -1; }
+.addRow { margin: 8px 0 0; }

@@ -249,8 +249,7 @@ document.addEventListener("click", e => {
   if (e.target.id === "coachBack") entryModal();
   const mk = e.target.closest("[data-mk]"); if (mk && !e.target.closest("a")) matchModal(mk.dataset.mk);
   const ed = e.target.closest("[data-edit]"); if (ed) editorModal(ed.dataset.edit);
-  if (e.target.id === "addRow") addEditorRows(1);
-  if (e.target.closest(".erow .x")) e.target.closest(".erow").remove();
+  const ar = e.target.closest(".addRow"); if (ar) addEditorRows(1, ar.dataset.pos);
   if (e.target.id === "eSave") saveLineup();
   if (e.target.id === "eCancel") matchModal(currentMatch);
   if (e.target.id === "eClear") clearLineup();
@@ -395,23 +394,36 @@ function matchModal(key) {
 }
 
 // ---------- Состав: редактор (только тренер своей команды) ----------
+const POSN = { G: "Вратари", D: "Защитники", F: "Нападающие" };
+const LNL = { G: ["Основной", "Запасной"], D: ["1-я пара", "2-я пара", "3-я пара", "4-я пара"], F: ["1-е звено", "2-е звено", "3-е звено", "4-е звено"] };
 const rowHtml = p => `<div class="erow">
+  <input type="checkbox" class="ck" aria-label="В составе"${p.on ? " checked" : ""}>
   <input class="n" inputmode="numeric" maxlength="2" placeholder="№" value="${esc(p.n ?? "")}">
   <input class="nm" maxlength="40" placeholder="Фамилия Имя" value="${esc(p.name ?? "")}">
-  <button type="button" class="x" aria-label="Убрать">×</button>
   <div class="eopt">
-    <select class="ps"><option value="G"${p.pos === "G" ? " selected" : ""}>Вратарь</option><option value="D"${p.pos === "D" ? " selected" : ""}>Защитник</option><option value="F"${!p.pos || p.pos === "F" ? " selected" : ""}>Нападающий</option></select>
-    <select class="ln"><option value="">Звено —</option>${[1, 2, 3, 4].map(i => `<option value="${i}"${+p.line === i ? " selected" : ""}>Звено/пара ${i}</option>`).join("")}</select>
+    <select class="ln"><option value="">${p.pos === "G" ? "Роль" : p.pos === "D" ? "Пара" : "Звено"} —</option>${LNL[p.pos].map((t, i) => `<option value="${i + 1}"${+p.line === i + 1 ? " selected" : ""}>${t}</option>`).join("")}</select>
   </div></div>`;
-function addEditorRows(n, pos) { for (let i = 0; i < n; i++) $("#eRows").insertAdjacentHTML("beforeend", rowHtml({ pos })); }
+// Все известные игроки команды: заранее заданные (ROSTERS в data.js) + те, кого тренер уже записывал в прошлых составах
+function knownPlayers(team) {
+  const map = new Map();
+  ((typeof ROSTERS !== "undefined" && ROSTERS[team]) || []).forEach(p => map.set(p.name, { ...p }));
+  Object.values(LU).filter(d => d.team === team).forEach(d => (d.players || []).forEach(p => map.set(p.name, { n: p.n, name: p.name, pos: p.pos })));
+  return [...map.values()];
+}
+function addEditorRows(n, pos) { for (let i = 0; i < n; i++) document.querySelector(`#eRows [data-pos="${pos}"]`).insertAdjacentHTML("beforeend", rowHtml({ pos, on: true })); }
 function editorModal(key) {
   const m = MATCHES.find(x => matchKey(x) === key), my = coachTeam();
   if (!m || !my || (m.home !== my && m.away !== my)) return;
-  const d = LU[`${key}__${my}`];
-  const rows = d ? d.players.map(rowHtml).join("") : [..."GG", ..."DDDDDDDD", ..."FFFFFFFFFFFF"].map((pos, i, arr) => { const k = arr.slice(0, i).filter(q => q === pos).length; return rowHtml({ pos, line: pos === "G" ? k + 1 : pos === "D" ? (k >> 1) + 1 : Math.floor(k / 3) + 1 }); }).join("");
+  const d = LU[`${key}__${my}`], cur = new Map((d ? d.players : []).map(p => [p.name, p]));
+  const all = knownPlayers(my);
+  const groups = ["G", "D", "F"].map(pos => {
+    let list = all.filter(p => p.pos === pos).sort((a, b) => a.n - b.n).map(p => { const c = cur.get(p.name); return c ? { ...p, ...c, on: true } : { ...p, line: "" }; });
+    if (!list.length && !all.length) list = Array.from({ length: { G: 2, D: 6, F: 12 }[pos] }, () => ({ pos }));
+    return `<div class="lg">${POSN[pos]}</div><div data-pos="${pos}">${list.map(p => rowHtml({ ...p, pos })).join("")}</div><button class="btn ghost addRow" data-pos="${pos}" type="button">+ Добавить</button>`;
+  }).join("");
   openModal(`<h3>Состав: ${T(my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
-    <div id="eRows">${rows}</div>
-    <button class="btn ghost" id="addRow" type="button">+ Добавить игрока</button>
+    <p class="hint">Отметьте галочкой игроков, которые выходят на матч, и выберите звено или пару. Нужного игрока нет в списке — нажмите «+ Добавить» в его разделе.</p>
+    <div id="eRows">${groups}</div>
     <div class="err" id="eMsg"></div>
     <div><button class="btn" id="eSave" type="button">Сохранить</button><button class="btn ghost" id="eCancel" type="button">Назад</button>${d ? `<button class="btn ghost" id="eClear" type="button">Очистить</button>` : ""}</div>`);
   currentMatch = key; editing = true;
@@ -423,12 +435,12 @@ async function saveLineup() {
   const players = [], nums = new Set();
   for (const r of document.querySelectorAll("#eRows .erow")) {
     const name = r.querySelector(".nm").value.trim(), nraw = r.querySelector(".n").value.trim();
-    if (!name && !nraw) continue;
+    if (!r.querySelector(".ck").checked || (!name && !nraw)) continue;
     if (!name) { msg.textContent = "У одного из игроков не указана фамилия"; return; }
     if (!/^\d{1,2}$/.test(nraw)) { msg.textContent = `Укажите номер (0–99) для «${name}»`; return; }
     if (nums.has(+nraw)) { msg.textContent = `Номер ${nraw} указан дважды`; return; }
     nums.add(+nraw);
-    const p = { n: +nraw, name, pos: r.querySelector(".ps").value };
+    const p = { n: +nraw, name, pos: r.parentElement.dataset.pos };
     const ln = r.querySelector(".ln").value; if (ln) p.line = +ln;
     players.push(p);
   }
@@ -462,3 +474,5 @@ Backend.init = initBackend();
   if (!state.role) entryModal();
   else if (state.fav === undefined) pickerModal();
 })();
+
+document.addEventListener("input", e => { const r = e.target.closest && e.target.closest(".erow"); if (r && e.target.matches(".n,.nm")) r.querySelector(".ck").checked = true; });
