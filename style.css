@@ -213,3 +213,8 @@ html, body { overflow-x: hidden; }
 .erow .ck { width: 22px; height: 22px; accent-color: var(--accent); }
 .erow .eopt { grid-column: 2 / -1; }
 .addRow { margin: 8px 0 0; }
+
+/* окно как отдельная страница (удобно для скриншотов с прокруткой) */
+body.mo > *:not(#overlay):not(script) { display: none !important; }
+body.mo .overlay { position: static; min-height: 100vh; align-items: flex-start; background: var(--bg); padding: 16px; }
+body.mo .modal { max-height: none; overflow: visible; margin: 0 auto; }

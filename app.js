@@ -173,9 +173,17 @@ const openModal = (html, lock = false) => {
   modalLocked = lock; editing = false;
   $("#overlay").classList.toggle("locked", lock);
   $("#modalBody").innerHTML = html;
+  if (!document.body.classList.contains("mo")) modalScroll = window.scrollY;
   $("#overlay").classList.add("on");
+  document.body.classList.add("mo");      // окно показывается как обычная страница: скриншот с прокруткой захватывает его целиком
+  window.scrollTo(0, 0);
 };
-const closeModal = () => { modalLocked = false; editing = false; currentMatch = null; $("#overlay").classList.remove("on", "locked"); };
+let modalScroll = 0;
+const closeModal = () => {
+  modalLocked = false; editing = false; currentMatch = null;
+  $("#overlay").classList.remove("on", "locked");
+  if (document.body.classList.contains("mo")) { document.body.classList.remove("mo"); window.scrollTo(0, modalScroll); }
+};
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function clubModal(id) {
