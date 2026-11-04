@@ -359,27 +359,38 @@ document.addEventListener("submit", async e => {
   applyRole(); renderAll(); closeModal();
 });
 
-// ---------- Состав: просмотр ----------
-const POS = { G: "Вратари", D: "Защитники", F: "Нападающие" };
-function lineupHtml(d) {
-  const body = ["G", "D", "F"].map(p => {
-    const arr = (d.players || []).filter(x => x.pos === p).sort((a, b) => (a.line || 9) - (b.line || 9) || a.n - b.n);
-    if (!arr.length) return "";
-    return `<div class="lg">${POS[p]}</div>` + arr.map(x => `<div class="pl"><span class="pn">${esc(x.n)}</span><span>${esc(x.name)}</span>${x.line ? `<small class="muted">${p === "D" ? "пара" : "звено"} ${esc(x.line)}</small>` : ""}</div>`).join("");
-  }).join("");
-  let when = "";
-  try { if (d.updatedAt && d.updatedAt.toDate) when = `<p class="hint" style="margin-top:8px">Обновлено: ${d.updatedAt.toDate().toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>`; } catch (_) {}
-  return body + when;
+// ---------- Состав: просмотр (в стиле карточки матча КХЛ) ----------
+const splitName = s => { s = String(s || "").trim(); const i = s.indexOf(" "); return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)]; };
+const byPos = (d, p) => d ? (d.players || []).filter(x => x.pos === p).sort((a, b) => (a.line || 9) - (b.line || 9) || a.n - b.n) : [];
+const whenHtml = d => { try { return d && d.updatedAt && d.updatedAt.toDate ? d.updatedAt.toDate().toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""; } catch (_) { return ""; } };
+const rc = x => x ? `<div class="rc"><span class="pb">${esc(x.n)}</span><small>${esc(splitName(x.name)[0])}</small></div>` : `<div class="rc"></div>`;
+function rinkHtml(hd, ad) {
+  const col = d => { const g = byPos(d, "G")[0], D = byPos(d, "D"), F = byPos(d, "F"); return { out: [D[0], g, D[1]], inn: [F[0], F[1], F[2]] }; };
+  const h = col(hd), a = col(ad);
+  let cells = "";
+  for (let r = 0; r < 3; r++) cells += rc(h.out[r]) + rc(h.inn[r]) + rc(a.inn[r]) + rc(a.out[r]);
+  return `<div class="lgh"><span>Стартовые пятёрки</span></div><div class="rink">${cells}</div>`;
+}
+function pairsHtml(title, ha, aa) {
+  const n = Math.max(ha.length, aa.length); if (!n) return "";
+  const nm = (x, right) => { if (!x) return ""; const [s, r] = splitName(x.name); return `<span class="nmb${right ? "" : " l"}"><b>${esc(s)}</b>${r ? "<br>" + esc(r) : ""}</span>`; };
+  const pn = x => x ? `<span class="pb">${esc(x.n)}</span>` : "";
+  let rows = "";
+  for (let i = 0; i < n; i++) rows += `<div class="pr"><div class="pc l">${nm(ha[i], false)}${pn(ha[i])}</div><div class="pc">${pn(aa[i])}${nm(aa[i], true)}</div></div>`;
+  return `<div class="lgh"><span>${title}</span></div><div class="prs">${rows}</div>`;
+}
+function lineupsHtml(hd, ad) {
+  return rinkHtml(hd, ad) + pairsHtml("Вратари", byPos(hd, "G"), byPos(ad, "G")) + pairsHtml("Защитники", byPos(hd, "D"), byPos(ad, "D")) + pairsHtml("Нападающие", byPos(hd, "F"), byPos(ad, "F"));
 }
 function matchModal(key) {
   const m = MATCHES.find(x => matchKey(x) === key); if (!m) return;
-  const my = coachTeam();
-  const side = id => {
-    const t = T(id), d = LU[`${key}__${id}`];
-    const edit = my === id ? `<button class="btn" data-edit="${key}">${d ? "✏️ Редактировать состав" : "➕ Записать состав"}</button>` : "";
-    return `<div class="lu"><div class="tm lh">${badge(t)}<b>${t.name}</b></div>${d ? lineupHtml(d) : `<p class="hint">Состав пока не объявлен</p>`}${edit}</div>`;
-  };
-  openModal(`<h3>${T(m.home).name} — ${T(m.away).name}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + m.label : ""}</p>${side(m.home)}${side(m.away)}`);
+  const my = coachTeam(), H = T(m.home), A = T(m.away);
+  const hd = LU[`${key}__${m.home}`], ad = LU[`${key}__${m.away}`];
+  const head = `<div class="mh"><div class="mt">${badge(H)}<b>${esc(H.name)}</b></div><div class="mt r"><b>${esc(A.name)}</b>${badge(A)}</div></div>`;
+  const body = hd || ad ? lineupsHtml(hd, ad) : `<p class="hint">Составы пока не объявлены</p>`;
+  const info = [[H, hd], [A, ad]].map(([t, d]) => d && whenHtml(d) ? `${esc(t.short || t.name)}: обновлён ${whenHtml(d)}` : "").filter(Boolean).join(" · ");
+  const edit = my && (my === m.home || my === m.away) ? `<button class="btn" data-edit="${key}">${(my === m.home ? hd : ad) ? "✏️ Редактировать состав" : "➕ Записать состав"}</button>` : "";
+  openModal(`<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 
@@ -397,7 +408,7 @@ function editorModal(key) {
   const m = MATCHES.find(x => matchKey(x) === key), my = coachTeam();
   if (!m || !my || (m.home !== my && m.away !== my)) return;
   const d = LU[`${key}__${my}`];
-  const rows = d ? d.players.map(rowHtml).join("") : [..."GG", ..."DDDDDD", ..."FFFFFFFFFFFF"].map(pos => rowHtml({ pos })).join("");
+  const rows = d ? d.players.map(rowHtml).join("") : [..."GG", ..."DDDDDDDD", ..."FFFFFFFFFFFF"].map((pos, i, arr) => { const k = arr.slice(0, i).filter(q => q === pos).length; return rowHtml({ pos, line: pos === "G" ? k + 1 : pos === "D" ? (k >> 1) + 1 : Math.floor(k / 3) + 1 }); }).join("");
   openModal(`<h3>Состав: ${T(my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
     <div id="eRows">${rows}</div>
     <button class="btn ghost" id="addRow" type="button">+ Добавить игрока</button>
