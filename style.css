@@ -165,3 +165,27 @@ html, body { overflow-x: hidden; }
 .news .more { display: inline-block; margin-top: 8px; color: var(--accent); font-size: 14px; font-weight: 600; }
 .ph { margin: 18px 0 6px; color: var(--accent); font-size: 15px; text-transform: uppercase; letter-spacing: .05em; }
 .prow { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); line-height: 1.25; }
+
+/* вход, роли, составы */
+.overlay.locked #close { display: none; }
+.entry { text-align: center; }
+.eLogo { height: 120px; width: auto; border-radius: 10px; margin-bottom: 10px; }
+.btn.big { display: block; width: 100%; margin: 10px 0 0; padding: 14px; font-size: 17px; }
+.inp { width: 100%; margin-top: 10px; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+.err { color: #ff6b6b; font-size: 14px; min-height: 18px; margin-top: 10px; }
+.rolebadge { background: var(--panel); border: 1px solid var(--accent); border-radius: 999px; padding: 4px 10px; font-size: 13px; white-space: nowrap; }
+.match.clickable { cursor: pointer; }
+.mfoot { grid-column: 1 / -1; }
+.chip { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.chip.mine { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.lu { margin: 14px 0 18px; }
+.lh { margin-bottom: 4px; }
+.lg { margin: 12px 0 4px; color: var(--accent); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.pl { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.pn { min-width: 26px; font-weight: 800; color: var(--accent); }
+.pl small { margin-left: auto; }
+.erow { display: grid; grid-template-columns: 54px minmax(0, 1fr) 36px; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.erow input, .erow select { min-width: 0; padding: 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+.erow .x { color: var(--muted); font-size: 22px; }
+.eopt { grid-column: 1 / -1; display: flex; gap: 6px; }
+.eopt select { flex: 1; }

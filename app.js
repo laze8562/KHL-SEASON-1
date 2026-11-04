@@ -96,11 +96,21 @@ function renderHome() {
   $("#homeNews").innerHTML = sortedNews().slice(0, 4).map(newsCard).join("");
 }
 
+const matchKey = m => m.tour ? `t${m.tour}-${m.home}-${m.away}` : null;
+function lineupChip(m) {
+  const key = matchKey(m); if (!key) return "";
+  const my = coachTeam();
+  const have = [m.home, m.away].filter(id => LU[`${key}__${id}`]).length;
+  if (my && (m.home === my || m.away === my) && !LU[`${key}__${my}`]) return `<div class="mfoot"><span class="chip mine">✏️ Записать состав</span></div>`;
+  if (have) return `<div class="mfoot"><span class="chip">✓ Составы: ${have}/2</span></div>`;
+  return "";
+}
 function matchHtml(m) {
   const sc = m.hs === null ? "—" : `${m.hs}:${m.as}${m.ot ? "<br><small>ОТ</small>" : ""}`;
   const when = m.date ? `${fmtDate(m.date)} · ${m.time}` : `Тур ${m.tour}`;
   const lab = m.label ? `<div class="lab">${m.label}</div>` : "";
-  return `<div class="match${m.label ? " derby" : ""}">${lab}<div class="d">${when}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}</div>`;
+  const key = matchKey(m);
+  return `<div class="match${m.label ? " derby" : ""}${key ? " clickable" : ""}"${key ? ` data-mk="${key}"` : ""}>${lab}<div class="d">${when}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}${lineupChip(m)}</div>`;
 }
 const regular = () => MATCHES.filter(m => m.stage === "regular");
 const tourCount = () => Math.max(0, ...regular().map(m => m.tour || 0));
@@ -158,8 +168,15 @@ function renderClubs() {
 function renderMedia() { $("#mediaBody").innerHTML = sortedNews().map(newsCard).join(""); }
 
 // ---------- Модальные окна ----------
-const openModal = html => { $("#modalBody").innerHTML = html; $("#overlay").classList.add("on"); };
-const closeModal = () => $("#overlay").classList.remove("on");
+let modalLocked = false, currentMatch = null, editing = false;
+const openModal = (html, lock = false) => {
+  modalLocked = lock; editing = false;
+  $("#overlay").classList.toggle("locked", lock);
+  $("#modalBody").innerHTML = html;
+  $("#overlay").classList.add("on");
+};
+const closeModal = () => { modalLocked = false; editing = false; currentMatch = null; $("#overlay").classList.remove("on", "locked"); };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function clubModal(id) {
   const t = T(id);
@@ -181,6 +198,7 @@ function settingsModal() {
     <div class="set">${fav ? "Любимый клуб: <b>" + fav.name + "</b>" : "Любимый клуб не выбран"}<br><button class="btn" id="chg">Изменить</button></div>
     <div class="set"><label><input type="checkbox" id="colorOn" ${state.color !== false ? "checked" : ""}> Цвет команды — перекрасить акценты сайта в цвет клуба</label></div>
     <div class="set links"><div class="hint">Мы в соцсетях</div>${LEAGUE.socials.map(s => `<a href="${s.u}" target="_blank" rel="noopener">${s.t}</a>`).join("")}</div>
+    <div class="set">${coachTeam() ? "Вы вошли как тренер: <b>" + T(coachTeam()).name + "</b>" : "Вы заходите как болельщик"}<br><button class="btn ghost" id="roleBtn">${coachTeam() ? "Выйти" : "Сменить роль"}</button></div>
     <div class="set"><div class="hint">Сброс — вернуть все настройки по умолчанию</div><button class="btn ghost" id="reset">Сбросить всё</button></div>`);
 }
 
@@ -215,7 +233,7 @@ $("#nav").addEventListener("click", e => { const b = e.target.closest("button");
 $("#brand").onclick = () => go("home");
 $("#gear").onclick = settingsModal;
 $("#close").onclick = closeModal;
-$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
+$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay" && !modalLocked) closeModal(); });
 
 document.addEventListener("click", e => {
   const g = e.target.closest("[data-go]"); if (g) go(g.dataset.go);
@@ -224,14 +242,24 @@ document.addEventListener("click", e => {
   const f = e.target.closest("[data-fav]");
   if (f) { state.fav = f.dataset.fav || null; save(); renderAll(); closeModal(); }
   if (e.target.id === "chg") pickerModal();
-  if (e.target.id === "reset") { localStorage.removeItem("khl-s1"); state = {}; renderAll(); closeModal(); pickerModal(); }
+  if (e.target.id === "reset") { localStorage.removeItem("khl-s1"); state = {}; signOutCoach(); applyRole(); renderAll(); entryModal(); }
+  if (e.target.id === "roleBtn") { delete state.role; save(); signOutCoach(); applyRole(); renderAll(); entryModal(); }
+  if (e.target.id === "roleFan") { state.role = "fan"; save(); signOutCoach(); applyRole(); renderAll(); closeModal(); if (state.fav === undefined) pickerModal(); }
+  if (e.target.id === "roleCoach") coachLoginModal();
+  if (e.target.id === "coachBack") entryModal();
+  const mk = e.target.closest("[data-mk]"); if (mk && !e.target.closest("a")) matchModal(mk.dataset.mk);
+  const ed = e.target.closest("[data-edit]"); if (ed) editorModal(ed.dataset.edit);
+  if (e.target.id === "addRow") addEditorRows(1);
+  if (e.target.closest(".erow .x")) e.target.closest(".erow").remove();
+  if (e.target.id === "eSave") saveLineup();
+  if (e.target.id === "eCancel") matchModal(currentMatch);
+  if (e.target.id === "eClear") clearLineup();
 });
 document.addEventListener("change", e => {
   if (e.target.id === "colorOn") { state.color = e.target.checked; save(); applyAccent(); }
 });
 
-renderAll();
-if (state.fav === undefined) pickerModal();
+// запуск вынесен в конец файла (после блока составов)
 
 // ---------- Партнёры (показываются внизу на всех вкладках) ----------
 function renderPartners() {
@@ -245,3 +273,181 @@ function renderPartners() {
     </div>`).join("");
 }
 renderPartners();
+
+// ======================================================================
+//  РОЛИ, ВХОД ТРЕНЕРА И СОСТАВЫ НА МАТЧ
+//  Данные составов хранятся в Firebase (см. firebase-config.js и ИНСТРУКЦИЯ.txt).
+// ======================================================================
+const COACH_DOMAIN = "khl-s1.app";
+const SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
+const Backend = { ready: false, auth: null, db: null, user: null, authKnown: false, init: null };
+let LU = {};   // составы: { "t1-ska-cska__ska": {players:[...], ...} }
+
+function loadScript(src) {
+  return new Promise((ok, fail) => {
+    const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => fail(new Error("load " + src));
+    document.head.appendChild(s);
+  });
+}
+async function initBackend() {
+  if (typeof FIREBASE_CONFIG === "undefined" || !FIREBASE_CONFIG) { Backend.authKnown = true; return false; }
+  try {
+    await loadScript(SDK + "firebase-app-compat.js");
+    await Promise.all([loadScript(SDK + "firebase-auth-compat.js"), loadScript(SDK + "firebase-firestore-compat.js")]);
+    firebase.initializeApp(FIREBASE_CONFIG);
+    Backend.auth = firebase.auth(); Backend.db = firebase.firestore(); Backend.ready = true;
+    Backend.db.collection("lineups").onSnapshot(snap => {
+      LU = {}; snap.forEach(d => { LU[d.id] = d.data(); });
+      renderSchedule(); renderHome();
+      if (currentMatch && !editing && $("#overlay").classList.contains("on")) matchModal(currentMatch);
+    }, err => console.warn("lineups", err));
+    Backend.auth.onAuthStateChanged(u => {
+      Backend.user = u; const first = !Backend.authKnown; Backend.authKnown = true;
+      if (first && state.role === "coach" && !u) { delete state.role; save(); applyRole(); entryModal(); }
+      applyRole(); renderSchedule();
+    });
+    return true;
+  } catch (e) { console.warn("Firebase не подключился", e); Backend.authKnown = true; return false; }
+}
+const signOutCoach = () => { if (Backend.auth && Backend.user) Backend.auth.signOut(); };
+function coachTeam() {
+  if (state.role !== "coach" || !Backend.user) return null;
+  const id = String(Backend.user.email || "").split("_")[0];
+  return T(id) ? id : null;
+}
+function applyRole() {
+  const b = $("#roleBadge"), id = coachTeam();
+  if (id) { b.style.display = ""; b.textContent = "🧢 " + T(id).short; } else b.style.display = "none";
+}
+
+// ---------- Окно входа ----------
+function entryModal() {
+  openModal(`<div class="entry">
+    ${typeof LEAGUE_LOGO !== "undefined" ? `<img class="eLogo" src="${LEAGUE_LOGO}" alt="КХЛ Season 1">` : ""}
+    <h3>Добро пожаловать!</h3><p class="hint">Кто вы?</p>
+    <button class="btn big" id="roleFan">🏒 Я болельщик</button>
+    <button class="btn big ghost" id="roleCoach">🧢 Я тренер</button>
+  </div>`, true);
+}
+function coachLoginModal(msg = "") {
+  openModal(`<form id="coachForm" class="entry" autocomplete="on">
+    <h3>Вход для тренера</h3><p class="hint">Логин и пароль выдаёт администратор лиги</p>
+    <input class="inp" id="cLogin" placeholder="Логин" autocomplete="username" autocapitalize="none" spellcheck="false">
+    <input class="inp" id="cPass" type="password" placeholder="Пароль" autocomplete="current-password">
+    <div class="err" id="cErr">${msg}</div>
+    <button class="btn big" type="submit" id="cGo">Войти</button>
+    <button class="btn big ghost" type="button" id="coachBack">Назад</button>
+  </form>`, true);
+}
+async function coachLogin(login, pw) {
+  const l = login.trim().toLowerCase(), id = l.split("_")[0];
+  if (!l || !pw) return "Введите логин и пароль";
+  await Backend.init;
+  if (!Backend.ready) return "Вход для тренеров пока не подключён администратором.";
+  if (!T(id)) return "Неверный логин или пароль";
+  try { await Backend.auth.signInWithEmailAndPassword(`${l}@${COACH_DOMAIN}`, pw); }
+  catch (e) { return e.code === "auth/network-request-failed" ? "Нет связи с сервером. Проверьте интернет." : e.code === "auth/too-many-requests" ? "Слишком много попыток. Подождите и попробуйте снова." : "Неверный логин или пароль"; }
+  state.role = "coach"; if (state.fav === undefined) state.fav = id; save();
+  return null;
+}
+document.addEventListener("submit", async e => {
+  if (e.target.id !== "coachForm") return;
+  e.preventDefault();
+  const btn = $("#cGo"); btn.disabled = true; btn.textContent = "Входим…";
+  const err = await coachLogin($("#cLogin").value, $("#cPass").value);
+  if (err) { $("#cErr").textContent = err; btn.disabled = false; btn.textContent = "Войти"; return; }
+  applyRole(); renderAll(); closeModal();
+});
+
+// ---------- Состав: просмотр ----------
+const POS = { G: "Вратари", D: "Защитники", F: "Нападающие" };
+function lineupHtml(d) {
+  const body = ["G", "D", "F"].map(p => {
+    const arr = (d.players || []).filter(x => x.pos === p).sort((a, b) => (a.line || 9) - (b.line || 9) || a.n - b.n);
+    if (!arr.length) return "";
+    return `<div class="lg">${POS[p]}</div>` + arr.map(x => `<div class="pl"><span class="pn">${esc(x.n)}</span><span>${esc(x.name)}</span>${x.line ? `<small class="muted">${p === "D" ? "пара" : "звено"} ${esc(x.line)}</small>` : ""}</div>`).join("");
+  }).join("");
+  let when = "";
+  try { if (d.updatedAt && d.updatedAt.toDate) when = `<p class="hint" style="margin-top:8px">Обновлено: ${d.updatedAt.toDate().toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>`; } catch (_) {}
+  return body + when;
+}
+function matchModal(key) {
+  const m = MATCHES.find(x => matchKey(x) === key); if (!m) return;
+  const my = coachTeam();
+  const side = id => {
+    const t = T(id), d = LU[`${key}__${id}`];
+    const edit = my === id ? `<button class="btn" data-edit="${key}">${d ? "✏️ Редактировать состав" : "➕ Записать состав"}</button>` : "";
+    return `<div class="lu"><div class="tm lh">${badge(t)}<b>${t.name}</b></div>${d ? lineupHtml(d) : `<p class="hint">Состав пока не объявлен</p>`}${edit}</div>`;
+  };
+  openModal(`<h3>${T(m.home).name} — ${T(m.away).name}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + m.label : ""}</p>${side(m.home)}${side(m.away)}`);
+  currentMatch = key;
+}
+
+// ---------- Состав: редактор (только тренер своей команды) ----------
+const rowHtml = p => `<div class="erow">
+  <input class="n" inputmode="numeric" maxlength="2" placeholder="№" value="${esc(p.n ?? "")}">
+  <input class="nm" maxlength="40" placeholder="Фамилия Имя" value="${esc(p.name ?? "")}">
+  <button type="button" class="x" aria-label="Убрать">×</button>
+  <div class="eopt">
+    <select class="ps"><option value="G"${p.pos === "G" ? " selected" : ""}>Вратарь</option><option value="D"${p.pos === "D" ? " selected" : ""}>Защитник</option><option value="F"${!p.pos || p.pos === "F" ? " selected" : ""}>Нападающий</option></select>
+    <select class="ln"><option value="">Звено —</option>${[1, 2, 3, 4].map(i => `<option value="${i}"${+p.line === i ? " selected" : ""}>Звено/пара ${i}</option>`).join("")}</select>
+  </div></div>`;
+function addEditorRows(n, pos) { for (let i = 0; i < n; i++) $("#eRows").insertAdjacentHTML("beforeend", rowHtml({ pos })); }
+function editorModal(key) {
+  const m = MATCHES.find(x => matchKey(x) === key), my = coachTeam();
+  if (!m || !my || (m.home !== my && m.away !== my)) return;
+  const d = LU[`${key}__${my}`];
+  const rows = d ? d.players.map(rowHtml).join("") : [..."GG", ..."DDDDDD", ..."FFFFFFFFFFFF"].map(pos => rowHtml({ pos })).join("");
+  openModal(`<h3>Состав: ${T(my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
+    <div id="eRows">${rows}</div>
+    <button class="btn ghost" id="addRow" type="button">+ Добавить игрока</button>
+    <div class="err" id="eMsg"></div>
+    <div><button class="btn" id="eSave" type="button">Сохранить</button><button class="btn ghost" id="eCancel" type="button">Назад</button>${d ? `<button class="btn ghost" id="eClear" type="button">Очистить</button>` : ""}</div>`);
+  currentMatch = key; editing = true;
+}
+async function saveLineup() {
+  const key = currentMatch, my = coachTeam(), msg = $("#eMsg");
+  const m = MATCHES.find(x => matchKey(x) === key);
+  if (!m || !my) return;
+  const players = [], nums = new Set();
+  for (const r of document.querySelectorAll("#eRows .erow")) {
+    const name = r.querySelector(".nm").value.trim(), nraw = r.querySelector(".n").value.trim();
+    if (!name && !nraw) continue;
+    if (!name) { msg.textContent = "У одного из игроков не указана фамилия"; return; }
+    if (!/^\d{1,2}$/.test(nraw)) { msg.textContent = `Укажите номер (0–99) для «${name}»`; return; }
+    if (nums.has(+nraw)) { msg.textContent = `Номер ${nraw} указан дважды`; return; }
+    nums.add(+nraw);
+    const p = { n: +nraw, name, pos: r.querySelector(".ps").value };
+    const ln = r.querySelector(".ln").value; if (ln) p.line = +ln;
+    players.push(p);
+  }
+  if (!players.length) { msg.textContent = "Добавьте хотя бы одного игрока"; return; }
+  if (players.length > 30) { msg.textContent = "Не больше 30 игроков"; return; }
+  const btn = $("#eSave"); btn.disabled = true; msg.textContent = "";
+  try {
+    await Backend.db.collection("lineups").doc(`${key}__${my}`).set({
+      team: my, match: key, tour: m.tour, home: m.home, away: m.away, players,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(), by: Backend.user.email
+    });
+    matchModal(key);
+  } catch (e) { btn.disabled = false; msg.textContent = "Не удалось сохранить. Проверьте интернет и что вы вошли как тренер этой команды."; }
+}
+async function clearLineup() {
+  const key = currentMatch, my = coachTeam();
+  if (!key || !my || !confirm("Удалить состав на этот матч?")) return;
+  try { await Backend.db.collection("lineups").doc(`${key}__${my}`).delete(); matchModal(key); }
+  catch (e) { $("#eMsg").textContent = "Не удалось удалить состав."; }
+}
+
+// ---------- Запуск ----------
+renderAll();
+Backend.init = initBackend();
+(async () => {
+  if (state.role === "coach") {            // ждём ответ Firebase: он решит, вошёл ли тренер
+    const ok = await Backend.init;
+    if (!ok) { delete state.role; save(); entryModal(); }
+    return;
+  }
+  if (!state.role) entryModal();
+  else if (state.fav === undefined) pickerModal();
+})();

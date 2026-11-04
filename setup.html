@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Создание аккаунтов тренеров</title>
+<style>body{font-family:system-ui,sans-serif;background:#04060a;color:#e8edf5;max-width:640px;margin:0 auto;padding:16px}
+textarea{width:100%;height:240px;background:#0d121b;color:#e8edf5;border:1px solid #1a2233;border-radius:10px;padding:10px;font:13px monospace}
+button{padding:12px 18px;border-radius:10px;border:0;background:#2f7bff;color:#fff;font:inherit;margin-top:10px}
+pre{white-space:pre-wrap;background:#0d121b;border-radius:10px;padding:10px}</style></head>
+<body>
+<h2>Создание аккаунтов тренеров</h2>
+<p>Вставьте сюда содержимое файла <b>trenery-logins.txt</b> целиком (строки «логин пароль») и нажмите кнопку. Страницу нужно открыть один раз, а потом <b>удалить файл setup.html из репозитория</b>.</p>
+<textarea id="t" placeholder="ska_razin пароль   # СКА — Андрей Разин"></textarea><br>
+<button id="go">Создать аккаунты</button>
+<pre id="log"></pre>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const log = s => { document.getElementById("log").textContent += s + "\n"; };
+document.getElementById("go").onclick = async () => {
+  if (typeof FIREBASE_CONFIG === "undefined" || !FIREBASE_CONFIG) { log("Сначала вставьте настройки Firebase в firebase-config.js"); return; }
+  firebase.initializeApp(FIREBASE_CONFIG); const auth = firebase.auth();
+  const lines = document.getElementById("t").value.split("\n").map(l => l.split("#")[0].trim()).filter(l => /^[a-z]+_[a-z0-9]+\s+\S+$/.test(l));
+  if (!lines.length) { log("Не нашёл ни одной строки вида «логин пароль»"); return; }
+  for (const l of lines) {
+    const [login, pw] = l.split(/\s+/);
+    try { await auth.createUserWithEmailAndPassword(login + "@khl-s1.app", pw); await auth.signOut(); log("✓ создан " + login); }
+    catch (e) { log("✗ " + login + ": " + (e.code === "auth/email-already-in-use" ? "уже существует" : e.code || e.message)); }
+  }
+  log("Готово. Теперь удалите setup.html из репозитория.");
+};
+</script></body></html>
