@@ -434,7 +434,7 @@ function editorModal(key) {
   const all = knownPlayers(my);
   ed = { key, my, rows: { G: [], D: [], F: [] } };
   for (const pos of ["G", "D", "F"]) {
-    ed.rows[pos] = all.filter(p => p.pos === pos).sort((a, b) => a.n - b.n).map(p => { const c = cur.get(p.name); return { pos, n: String(p.n), name: p.name, on: !!c, line: c && c.line ? String(c.line) : "" }; });
+    ed.rows[pos] = all.filter(p => p.pos === pos).sort((a, b) => (a.n ?? 999) - (b.n ?? 999)).map(p => { const c = cur.get(p.name); return { pos, n: p.n == null ? "" : String(p.n), name: p.name, on: !!c, line: c && c.line ? String(c.line) : "" }; });
   }
   edMain();
 }
