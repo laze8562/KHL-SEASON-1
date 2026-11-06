@@ -25,8 +25,8 @@ function standings(conf) {
     [[by[m.home], homeWon], [by[m.away], !homeWon]].forEach(([r, won]) => {
       if (!r) return;
       r.gp++; changed = true;
-      if (won) { if (m.ot) { r.otw++; r.pts += 2; } else { r.w++; r.pts += 3; } }   // победа 3, победа в ОТ/буллитах 2
-      else if (m.ot) r.pts += 1;                                                       // поражение в ОТ/буллитах 1
+      if (won) { r.pts += 2; if (m.ot) r.otw++; else r.w++; }   // победа (в основное время, ОТ или по буллитам) — 2 очка
+      else if (m.ot) r.pts += 1;                                 // поражение в ОТ или по буллитам — 1 очко, в основное время — 0
     });
   });
   if (changed) rows.sort((a, b) => b.pts - a.pts || (b.w + b.otw) - (a.w + a.otw) || a.i - b.i);
@@ -40,7 +40,7 @@ function standingsCalc(conf) {
     [[m.home, m.hs, m.as], [m.away, m.as, m.hs]].forEach(([id, f, a]) => {
       const r = get(id); if (!r) return;
       r.gp++; r.gf += f; r.ga += a;
-      if (f > a) { if (m.ot) { r.otw++; r.pts += 2; } else { r.w++; r.pts += 3; } }
+      if (f > a) { r.pts += 2; if (m.ot) r.otw++; else r.w++; }
       else if (m.ot) { r.otl++; r.pts += 1; } else r.l++;
     });
   });
@@ -123,7 +123,7 @@ function lineupChip(m) {
 function matchHtml(m) {
   const sc = m.hs === null ? "—" : `${m.hs}:${m.as}${m.ot ? `<br><small>${typeof m.ot === "string" ? m.ot : "ОТ"}</small>` : ""}`;
   const when = m.date ? `${fmtDate(m.date)} · ${m.time}` : `Тур ${m.tour}`;
-  const lab = (m.live ? `<div class="lab live">● Идёт</div>` : "") + (m.label ? `<div class="lab">${m.label}</div>` : "");
+  const lab = (m.live ? `<div class="lab live">● Идёт${m.period ? " · " + (m.period === "ОТ" || m.period === "Б" ? m.period : m.period + "-й период") : ""}</div>` : "") + (m.label ? `<div class="lab">${m.label}</div>` : "");
   const key = matchKey(m);
   return `<div class="match${m.label ? " derby" : ""}${m.live ? " live" : ""}${key ? " clickable" : ""}"${key ? ` data-mk="${key}"` : ""}>${lab}<div class="d">${when}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}${lineupChip(m)}</div>`;
 }
@@ -275,6 +275,8 @@ document.addEventListener("click", e => {
   const de = e.target.closest("[data-edit]"); if (de) editorModal(de.dataset.edit, de.dataset.team);
   const cp = e.target.closest("[data-copy]"); if (cp) copyCred(cp);
   const ms = e.target.closest("[data-ms]"); if (ms) matchAction(ms.dataset.ms);
+  const ga = e.target.closest("[data-gadd]"); if (ga) goalAdd();
+  const gd = e.target.closest("[data-gdel]"); if (gd) goalDel(gd.dataset.gdel);
   const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
   if (e.target.id === "pAdd") { const pos = $("#pRows").dataset.pos; edCollect(pos); ed.rows[pos].push({ pos, n: "", name: "", on: true, line: "" }); edPicker(pos); }
   if (e.target.id === "pDone") { edCollect($("#pRows").dataset.pos); edMain(); }
@@ -326,50 +328,129 @@ function applyLive() {
     const d = LM[k];
     if (d && (d.status === "live" || d.status === "final")) {
       m.hs = d.hs || 0; m.as = d.as || 0; m.ot = d.ot || false;
-      m.live = d.status === "live";
+      m.live = d.status === "live"; m.period = d.period || "";
       m.liveFinal = d.status === "final" && m._o.hs === null;   // идёт в таблицу, только если результата нет в data.js
     } else { m.hs = m._o.hs; m.as = m._o.as; m.ot = m._o.ot; m.live = false; m.liveFinal = false; }
   });
 }
 // перерисовать открытое окно матча, не сбрасывая прокрутку
 function refreshModal() {
+  const ae = document.activeElement;
+  if (ae && ae.closest && ae.closest("#modalBody") && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;   // не сбивать ввод
   if (currentMatch && !editing && $("#overlay").classList.contains("on")) { const y = window.scrollY; matchModal(currentMatch); window.scrollTo(0, y); }
+}
+// ---------- Периоды, голы и управление матчем ----------
+const PER = ["1", "2", "3", "ОТ", "Б"], PK = { "1": "p1", "2": "p2", "3": "p3", "ОТ": "ot", "Б": "so" };
+const isStarted = d => !!d && (d.status === "live" || d.status === "final");
+// кружки периодов под счётом: 1, 2, 3 и (если включены создателем) ОТ и Б, под каждым счёт периода
+function periodsHtml(d, canEdit) {
+  if (!d.per) return "";
+  const ci = Math.max(0, PER.indexOf(d.period || "1")), live = d.status === "live";
+  return `<div class="pers">${PER.map((p, i) => {
+    const sc = d.per[PK[p]], reached = i <= ci || !!(sc && (sc.h || sc.a));
+    if (i >= 3 && !reached && !canEdit) return "";
+    const txt = sc ? `${sc.h}:${sc.a}` : reached ? "0:0" : "";
+    const circ = canEdit ? `<button type="button" class="pcirc" data-ms="per${i}">${p}</button>` : `<span class="pcirc">${p}</span>`;
+    return `<div class="per${i === ci && live ? " cur" : reached ? " done" : ""}">${circ}<small>${txt || "&nbsp;"}</small></div>`;
+  }).join("")}</div>`;
+}
+const goalsSorted = g => {
+  const tm = t => { const [m, s] = String(t || "0:0").split(":"); return (+m || 0) * 60 + (+s || 0); };
+  return [...g].sort((x, y) => PER.indexOf(x.per) - PER.indexOf(y.per) || tm(x.t) - tm(y.t));
+};
+// список голов: время, счёт после гола, кто забил, передачи, видео
+function goalsHtml(d, admin) {
+  const list = goalsSorted((d && d.goals) || []);
+  if (!list.length) return "";
+  let h = 0, a = 0;
+  const rows = list.map(g => {
+    if (g.team === "away") a++; else h++;
+    const sc = g.team === "away" ? `<span class="dim">${h}</span>:<b>${a}</b>` : `<b>${h}</b>:<span class="dim">${a}</span>`;
+    const play = g.v && /^https?:\/\//i.test(g.v) ? `<a class="gplay" href="${esc(g.v)}" target="_blank" rel="noopener" aria-label="Смотреть момент">▶</a>` : "";
+    const del = admin ? `<button type="button" class="gdel" data-gdel="${esc(g.id)}" aria-label="Удалить гол">✕</button>` : "";
+    return `<div class="gr"><div class="gt">${esc(g.t || "")}<small>${esc(g.st || (g.per === "ОТ" || g.per === "Б" ? g.per : ""))}</small></div><div class="gs">${sc}</div><div class="gw"><b>${esc(g.p)}</b>${g.a ? `<span>${esc(g.a)}</span>` : ""}</div>${play}${del}</div>`;
+  }).join("");
+  return `<div class="lgh"><span>Заброшенные шайбы</span></div><div class="grs">${rows}</div>`;
+}
+function goalsAdmin(m, d) {
+  const H = T(m.home), A = T(m.away), cp = (d && d.period) || "1";
+  return `<div class="box adm"><h3>Добавить гол</h3><p class="hint">Можно после эфира: время, кто забил, передачи и ссылка на видео.</p>
+    <select class="inp" id="gTeam"><option value="home">${esc(H.name)}</option><option value="away">${esc(A.name)}</option></select>
+    <select class="inp" id="gPer">${PER.map(p => `<option${p === cp ? " selected" : ""}>${p}</option>`).join("")}</select>
+    <input class="inp" id="gTime" placeholder="Время гола, например 34:14" autocomplete="off">
+    <select class="inp" id="gStr"><option value="РАВ">РАВ — равные составы</option><option value="БОЛ">БОЛ — большинство</option><option value="МЕН">МЕН — меньшинство</option><option value="">Не указывать</option></select>
+    <input class="inp" id="gP" placeholder="Кто забил: 77. Зуган Д." autocomplete="off">
+    <input class="inp" id="gAs" placeholder="Передачи: 37. Сукезе Н., 27. Менелл Б." autocomplete="off">
+    <input class="inp" id="gV" placeholder="Ссылка на видео (необязательно)" inputmode="url" autocomplete="off">
+    <div class="err" id="gErr"></div>
+    <button class="btn big" data-gadd="1" type="button">➕ Добавить гол</button></div>`;
 }
 // панель управления матчем (только создатель)
 function adminPanel(key, m) {
   const d = LM[key], H = T(m.home), A = T(m.away);
-  if (!d) return `<div class="box adm"><h3>Управление матчем</h3><button class="btn big" data-ms="start">▶ Начать матч</button></div>`;
-  const row = (t, p, mi, pl) => `<div class="srow"><span>${esc(t.short || t.name)}</span><button class="btn ghost" data-ms="${mi}">−</button><b>${p}</b><button class="btn" data-ms="${pl}">+</button></div>`;
+  if (!isStarted(d)) return `<div class="box adm"><h3>Управление матчем</h3><button class="btn big" data-ms="start">▶ Начать матч</button></div>`;
+  const row = (t, p, mi, pl) => `<div class="srow"><span>${esc(t.short || t.name)}</span><button class="btn ghost" data-ms="${mi}" type="button">−</button><b>${p}</b><button class="btn" data-ms="${pl}" type="button">+</button></div>`;
   if (d.status === "live") return `<div class="box adm"><h3>Матч идёт</h3>
+    <p class="hint">Период выбирайте кружками под счётом (1, 2, 3, ОТ, Б). Голы «+» записываются в выбранный период.</p>
     ${row(H, d.hs || 0, "hm", "hp")}${row(A, d.as || 0, "am", "ap")}
-    <select class="inp" id="otSel"><option value="">Закончился в основное время</option><option value="ОТ">Закончился в овертайме</option><option value="Б">Закончился по буллитам</option></select>
     <div class="err" id="msErr"></div>
-    <button class="btn big" data-ms="finish">🏁 Завершить матч</button>
-    <button class="btn big ghost" data-ms="reset">Отменить матч</button></div>`;
+    <button class="btn big" data-ms="finish" type="button">🏁 Завершить матч</button>
+    <button class="btn big ghost" data-ms="reset" type="button">Отменить матч</button></div>`;
   return `<div class="box adm"><h3>Матч завершён</h3><p class="hint">Результат учтён в турнирной таблице.</p>
-    <button class="btn" data-ms="reopen">↩ Вернуть в игру (править счёт)</button>
-    <button class="btn ghost" data-ms="reset">Сбросить результат</button></div>`;
+    <button class="btn" data-ms="reopen" type="button">↩ Вернуть в игру (править счёт)</button>
+    <button class="btn ghost" data-ms="reset" type="button">Сбросить результат</button></div>`;
 }
 async function matchAction(act) {
   if (!isAdmin() || !Backend.db || !currentMatch) return;
   const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key); if (!m) return;
   const ref = Backend.db.collection("matches").doc(key), cur = LM[key];
   const stamp = firebase.firestore.FieldValue.serverTimestamp();
+  const base = { home: m.home, away: m.away, tour: m.tour };
+  const per0 = () => { const p = { ...(cur.per || {}) }; if (!cur.per) p.p1 = { h: cur.hs || 0, a: cur.as || 0 }; return p; };
+  const sum = per => { const v = Object.values(per); return { hs: v.reduce((s, x) => s + x.h, 0), as: v.reduce((s, x) => s + x.a, 0) }; };
   try {
-    if (act === "start") await ref.set({ home: m.home, away: m.away, tour: m.tour, status: "live", hs: 0, as: 0, ot: "", updatedAt: stamp });
-    else if (!cur) return;
+    if (act === "start") await ref.set({ ...base, ...(cur && cur.goals ? { goals: cur.goals } : {}), status: "live", period: "1", per: { p1: { h: 0, a: 0 } }, hs: 0, as: 0, ot: "", updatedAt: stamp });
+    else if (!isStarted(cur)) return;
     else if (["hp", "hm", "ap", "am"].includes(act)) {
-      const hs = Math.max(0, (cur.hs || 0) + (act === "hp" ? 1 : act === "hm" ? -1 : 0));
-      const as = Math.max(0, (cur.as || 0) + (act === "ap" ? 1 : act === "am" ? -1 : 0));
-      await ref.update({ hs, as, updatedAt: stamp });
+      if (cur.status !== "live") return;
+      const per = per0(), k = PK[cur.period || "1"], e = { ...(per[k] || { h: 0, a: 0 }) };
+      if (act[0] === "h") e.h = Math.max(0, e.h + (act === "hp" ? 1 : -1)); else e.a = Math.max(0, e.a + (act === "ap" ? 1 : -1));
+      per[k] = e;
+      await ref.update({ per, ...sum(per), updatedAt: stamp });
+    }
+    else if (/^per[0-4]$/.test(act)) {          // выбор периода: 1, 2, 3, ОТ, Б
+      if (cur.status !== "live") return;
+      const i = +act[3], per = per0();
+      if (!per[PK[PER[i]]]) per[PK[PER[i]]] = { h: 0, a: 0 };
+      [3, 4].forEach(j => { const e = per[PK[PER[j]]]; if (j > i && e && !e.h && !e.a) delete per[PK[PER[j]]]; });   // выключили ОТ/Б — пустой кружок убираем
+      await ref.update({ period: PER[i], per, ...sum(per), updatedAt: stamp });
     }
     else if (act === "finish") {
-      if ((cur.hs || 0) === (cur.as || 0)) { const er = $("#msErr"); if (er) er.textContent = "Счёт равный: в хоккее ничьей не бывает. Исправьте счёт."; return; }
-      await ref.update({ status: "final", ot: ($("#otSel") || {}).value || "", updatedAt: stamp });
+      if ((cur.hs || 0) === (cur.as || 0)) { const er = $("#msErr"); if (er) er.textContent = "Счёт равный: в хоккее ничьей не бывает. Исправьте счёт или включите ОТ / Б."; return; }
+      await ref.update({ status: "final", ot: cur.period === "ОТ" || cur.period === "Б" ? cur.period : "", updatedAt: stamp });
     }
     else if (act === "reopen") await ref.update({ status: "live", updatedAt: stamp });
-    else if (act === "reset") { if (!confirm("Сбросить матч? Счёт и результат будут удалены.")) return; await ref.delete(); }
+    else if (act === "reset") {
+      if (!confirm("Сбросить матч? Счёт и результат будут удалены" + (cur.goals && cur.goals.length ? ", список голов останется." : "."))) return;
+      if (cur.goals && cur.goals.length) await ref.set({ ...base, goals: cur.goals }); else await ref.delete();
+    }
   } catch (e) { alert("Не удалось сохранить. Проверьте интернет и что правила Firestore обновлены (файл firestore.rules)."); }
+}
+async function goalAdd() {
+  if (!isAdmin() || !Backend.db || !currentMatch) return;
+  const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key), er = $("#gErr"); if (!m) return;
+  const p = $("#gP").value.trim(), v = $("#gV").value.trim();
+  if (!p) { er.textContent = "Укажите, кто забил"; return; }
+  if (v && !/^https?:\/\//i.test(v)) { er.textContent = "Ссылка на видео должна начинаться с https://"; return; }
+  const g = { id: String(Date.now()), team: $("#gTeam").value, per: $("#gPer").value, t: $("#gTime").value.trim(), st: $("#gStr").value, p, a: $("#gAs").value.trim(), v };
+  const goals = [...((LM[key] && LM[key].goals) || []), g].slice(0, 60);
+  try { await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, goals }, { merge: true }); }
+  catch (e) { er.textContent = "Не удалось сохранить. Проверьте правила Firestore."; }
+}
+async function goalDel(id) {
+  const key = currentMatch; if (!isAdmin() || !key || !LM[key] || !confirm("Удалить этот гол?")) return;
+  const goals = (LM[key].goals || []).filter(g => g.id !== id);
+  try { await Backend.db.collection("matches").doc(key).update({ goals }); } catch (e) { alert("Не удалось удалить гол."); }
 }
 
 function loadScript(src) {
@@ -529,8 +610,10 @@ function matchModal(key) {
     ? eb(m.home, hd, ` — ${esc(H.short || H.name)}`) + eb(m.away, ad, ` — ${esc(A.short || A.name)}`)
     : my && (my === m.home || my === m.away) ? eb(my, my === m.home ? hd : ad, "") : "";
   const watch = `<a class="btn watch" href="${TWITCH_URL}" target="_blank" rel="noopener">📺 Смотреть игру</a>`;
-  const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small></div>`;
-  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
+  const d = LM[key], started = isStarted(d);
+  const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small>${started ? periodsHtml(d, isAdmin() && d.status === "live") : ""}</div>`;
+  const goals = goalsHtml(d, isAdmin());
+  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 
