@@ -223,3 +223,10 @@ body.mo .modal { max-height: none; overflow: visible; margin: 0 auto; }
 .sel { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
 .sel span { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); }
 .sel b { color: var(--accent); }
+
+/* Twitch и вкладка «Доступы» */
+.tg.twitch { border-color: #9146ff; }
+.tg .av { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; background: #555; }
+.tg .av.ph { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; background: #9146ff; }
+#access code { font: 13px ui-monospace, Menlo, Consolas, monospace; user-select: all; }
+.btn.sm { padding: 5px 10px; font-size: 13px; margin: 0; white-space: nowrap; }

@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Создатель лиги: единственный аккаунт admin@khl-s1.app
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'admin@khl-s1.app';
+    }
+
+    // Id клуба вошедшего тренера: из почты ska_razin@khl-s1.app получается "ska"
+    function myTeam() {
+      return request.auth.token.email.split('_')[0];
+    }
+
+    // Составы: читают все, пишет создатель или тренер ТОЛЬКО своей команды.
+    // Id документа: "<матч>__<команда>", например "t1-ska-cska__ska"
+    match /lineups/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        || (request.auth != null
+            && id.matches('.*__' + myTeam())
+            && request.resource.data.team == myTeam());
+      allow delete: if isAdmin()
+        || (request.auth != null && id.matches('.*__' + myTeam()));
+    }
+
+    // Логины и пароли тренеров: видит и меняет только создатель
+    match /credentials/{id} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

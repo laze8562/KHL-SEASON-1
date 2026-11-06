@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Настройка доступов КХЛ</title>
+<style>body{font-family:system-ui,sans-serif;background:#04060a;color:#e8edf5;max-width:640px;margin:0 auto;padding:16px}
+textarea,input{width:100%;background:#0d121b;color:#e8edf5;border:1px solid #1a2233;border-radius:10px;padding:10px;font:14px monospace;margin-top:6px}
+textarea{height:240px;font-size:13px}
+button{padding:12px 18px;border-radius:10px;border:0;background:#2f7bff;color:#fff;font:inherit;margin-top:10px}
+button:disabled{opacity:.5}
+pre{white-space:pre-wrap;background:#0d121b;border-radius:10px;padding:10px}
+ol{line-height:1.5}</style></head>
+<body>
+<h2>Настройка доступов</h2>
+<ol>
+  <li>В Firebase → Firestore → «Правила» вставьте содержимое файла <b>firestore.rules</b> и нажмите «Опубликовать».</li>
+  <li>Придумайте пароль создателя (от 6 символов) — логин будет <b>admin</b>.</li>
+  <li>Вставьте содержимое <b>trenery-logins.txt</b> и нажмите кнопку.</li>
+  <li>Страница создаст аккаунт создателя и аккаунты тренеров, а логины и пароли сохранит в закрытую коллекцию (её видит только создатель).</li>
+  <li>После этого <b>удалите setup.html из репозитория</b>.</li>
+</ol>
+<label>Пароль создателя<input id="adm" type="password" autocomplete="new-password" placeholder="Минимум 6 символов"></label>
+<label style="display:block;margin-top:12px">Логины тренеров<textarea id="t" placeholder="ska_razin пароль   # СКА — Андрей Разин"></textarea></label>
+<button id="go">Создать аккаунты</button>
+<pre id="log"></pre>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const DOMAIN = "khl-s1.app", ADMIN = "admin";
+const log = s => { document.getElementById("log").textContent += s + "\n"; };
+document.getElementById("go").onclick = async () => {
+  const btn = document.getElementById("go");
+  if (typeof FIREBASE_CONFIG === "undefined" || !FIREBASE_CONFIG) { log("Сначала вставьте настройки Firebase в firebase-config.js"); return; }
+  const adminPw = document.getElementById("adm").value;
+  if (adminPw.length < 6) { log("Пароль создателя — минимум 6 символов"); return; }
+  const coaches = document.getElementById("t").value.split("\n").map(raw => {
+    const [main, note] = raw.split("#"); return { line: (main || "").trim(), note: (note || "").trim() };
+  }).filter(x => /^[a-z]+_[a-z0-9]+\s+\S+$/.test(x.line)).map(x => { const [login, pw] = x.line.split(/\s+/); return { login, pw, note: x.note }; });
+  if (!coaches.length) { log("Не нашёл ни одной строки вида «логин пароль»"); return; }
+  btn.disabled = true;
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const auth = firebase.auth(), db = firebase.firestore();
+
+  // 1. аккаунты тренеров
+  for (const c of coaches) {
+    try { await auth.createUserWithEmailAndPassword(`${c.login}@${DOMAIN}`, c.pw); await auth.signOut(); log("✓ создан " + c.login); }
+    catch (e) { log("• " + c.login + ": " + (e.code === "auth/email-already-in-use" ? "уже существует" : e.code || e.message)); }
+  }
+
+  // 2. аккаунт создателя (создаём или входим, если уже есть)
+  const adminEmail = `${ADMIN}@${DOMAIN}`;
+  try { await auth.createUserWithEmailAndPassword(adminEmail, adminPw); log("✓ создан создатель (admin)"); }
+  catch (e) {
+    if (e.code !== "auth/email-already-in-use") { log("✗ создатель: " + (e.code || e.message)); btn.disabled = false; return; }
+    try { await auth.signInWithEmailAndPassword(adminEmail, adminPw); log("• создатель уже существует, вход выполнен"); }
+    catch (e2) { log("✗ создатель существует, но пароль не подошёл"); btn.disabled = false; return; }
+  }
+
+  // 3. список логинов и паролей для вкладки «Доступы» (пишет только создатель, правила это проверяют)
+  try {
+    const batch = db.batch();
+    coaches.forEach(c => batch.set(db.collection("credentials").doc(c.login), { login: c.login, password: c.pw, note: c.note, club: c.login.split("_")[0] }));
+    await batch.commit();
+    log("✓ логины и пароли сохранены для вкладки «Доступы»");
+  } catch (e) { log("✗ не удалось сохранить список: " + (e.code || e.message) + ". Проверьте, что правила из firestore.rules опубликованы."); }
+  await auth.signOut();
+  log("Готово. Теперь удалите setup.html из репозитория.");
+  btn.disabled = false;
+};
+</script></body></html>

@@ -102,6 +102,7 @@ function lineupChip(m) {
   const my = coachTeam();
   const have = [m.home, m.away].filter(id => LU[`${key}__${id}`]).length;
   if (my && (m.home === my || m.away === my) && !LU[`${key}__${my}`]) return `<div class="mfoot"><span class="chip mine">✏️ Записать состав</span></div>`;
+  if (isAdmin()) return `<div class="mfoot"><span class="chip mine">✏️ Составы: ${have}/2</span></div>`;
   if (have) return `<div class="mfoot"><span class="chip">✓ Составы: ${have}/2</span></div>`;
   return "";
 }
@@ -202,11 +203,12 @@ function pickerModal() {
 }
 function settingsModal() {
   const fav = state.fav && T(state.fav);
+  const locked = !!coachTeam();   // у тренера клуб закреплён за его командой
   openModal(`<h3>Настройки</h3>
-    <div class="set">${fav ? "Любимый клуб: <b>" + fav.name + "</b>" : "Любимый клуб не выбран"}<br><button class="btn" id="chg">Изменить</button></div>
+    <div class="set">${fav ? "Любимый клуб: <b>" + fav.name + "</b>" : "Любимый клуб не выбран"}${locked ? `<br><small class="muted">Закреплён за вашей командой</small>` : `<br><button class="btn" id="chg">Изменить</button>`}</div>
     <div class="set"><label><input type="checkbox" id="colorOn" ${state.color !== false ? "checked" : ""}> Цвет команды — перекрасить акценты сайта в цвет клуба</label></div>
     <div class="set links"><div class="hint">Мы в соцсетях</div>${LEAGUE.socials.map(s => `<a href="${s.u}" target="_blank" rel="noopener">${s.t}</a>`).join("")}</div>
-    <div class="set">${coachTeam() ? "Вы вошли как тренер: <b>" + T(coachTeam()).name + "</b>" : "Вы заходите как болельщик"}<br><button class="btn ghost" id="roleBtn">${coachTeam() ? "Выйти" : "Сменить роль"}</button></div>
+    <div class="set">${isAdmin() ? "Вы вошли как <b>создатель лиги</b>" : coachTeam() ? "Вы вошли как тренер: <b>" + T(coachTeam()).name + "</b>" : "Вы заходите как болельщик"}<br><button class="btn ghost" id="roleBtn">${coachTeam() || isAdmin() ? "Выйти" : "Сменить роль"}</button></div>
     <div class="set"><div class="hint">Сброс — вернуть все настройки по умолчанию</div><button class="btn ghost" id="reset">Сбросить всё</button></div>`);
 }
 
@@ -248,15 +250,16 @@ document.addEventListener("click", e => {
   const c = e.target.closest("[data-club]"); if (c) clubModal(c.dataset.club);
   const ls = e.target.closest("[data-list]"); if (ls) listModal(ls.dataset.list);
   const f = e.target.closest("[data-fav]");
-  if (f) { state.fav = f.dataset.fav || null; save(); renderAll(); closeModal(); }
-  if (e.target.id === "chg") pickerModal();
+  if (f && !coachTeam()) { state.fav = f.dataset.fav || null; save(); renderAll(); closeModal(); }
+  if (e.target.id === "chg" && !coachTeam()) pickerModal();
   if (e.target.id === "reset") { localStorage.removeItem("khl-s1"); state = {}; signOutCoach(); applyRole(); renderAll(); entryModal(); }
   if (e.target.id === "roleBtn") { delete state.role; save(); signOutCoach(); applyRole(); renderAll(); entryModal(); }
   if (e.target.id === "roleFan") { state.role = "fan"; save(); signOutCoach(); applyRole(); renderAll(); closeModal(); if (state.fav === undefined) pickerModal(); }
   if (e.target.id === "roleCoach") coachLoginModal();
   if (e.target.id === "coachBack") entryModal();
   const mk = e.target.closest("[data-mk]"); if (mk && !e.target.closest("a")) matchModal(mk.dataset.mk);
-  const de = e.target.closest("[data-edit]"); if (de) editorModal(de.dataset.edit);
+  const de = e.target.closest("[data-edit]"); if (de) editorModal(de.dataset.edit, de.dataset.team);
+  const cp = e.target.closest("[data-copy]"); if (cp) copyCred(cp);
   const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
   if (e.target.id === "pAdd") { const pos = $("#pRows").dataset.pos; edCollect(pos); ed.rows[pos].push({ pos, n: "", name: "", on: true, line: "" }); edPicker(pos); }
   if (e.target.id === "pDone") { edCollect($("#pRows").dataset.pos); edMain(); }
@@ -282,6 +285,12 @@ function renderPartners() {
     </div>`).join("");
 }
 renderPartners();
+
+// аватарка канала КХЛ TB в карточке Twitch (файл twitch.png лежит рядом с index.html)
+document.querySelectorAll("img[data-twitch]").forEach(i => {
+  i.onerror = () => i.replaceWith(Object.assign(document.createElement("span"), { className: "av ph", textContent: "TB" }));
+  i.src = "twitch.png";
+});
 
 // ======================================================================
 //  РОЛИ, ВХОД ТРЕНЕРА И СОСТАВЫ НА МАТЧ
@@ -313,20 +322,56 @@ async function initBackend() {
     Backend.auth.onAuthStateChanged(u => {
       Backend.user = u; const first = !Backend.authKnown; Backend.authKnown = true;
       if (first && state.role === "coach" && !u) { delete state.role; save(); applyRole(); entryModal(); }
-      applyRole(); renderSchedule();
+      applyRole(); renderSchedule(); watchCreds();
     });
     return true;
   } catch (e) { console.warn("Firebase не подключился", e); Backend.authKnown = true; return false; }
 }
 const signOutCoach = () => { if (Backend.auth && Backend.user) Backend.auth.signOut(); };
+const ADMIN_LOGIN = "admin";   // логин создателя: admin@khl-s1.app (то же имя зашито в firestore.rules)
+function isAdmin() {
+  return state.role === "coach" && !!Backend.user && String(Backend.user.email || "").toLowerCase() === `${ADMIN_LOGIN}@${COACH_DOMAIN}`;
+}
 function coachTeam() {
   if (state.role !== "coach" || !Backend.user) return null;
   const id = String(Backend.user.email || "").split("_")[0];
   return T(id) ? id : null;
 }
 function applyRole() {
-  const b = $("#roleBadge"), id = coachTeam();
-  if (id) { b.style.display = ""; b.textContent = "🧢 " + T(id).short; } else b.style.display = "none";
+  const b = $("#roleBadge"), id = coachTeam(), adm = isAdmin();
+  if (adm) { b.style.display = ""; b.textContent = "👑 Создатель"; }
+  else if (id) { b.style.display = ""; b.textContent = "🧢 " + T(id).short; }
+  else b.style.display = "none";
+  // у тренера любимый клуб всегда равен его команде
+  if (id && state.fav !== id) { state.fav = id; save(); applyAccent(); renderHome(); }
+  // вкладка «Доступы» видна только создателю
+  const nb = $("#navAccess"); if (nb) nb.style.display = adm ? "" : "none";
+  if (!adm && $("#access").classList.contains("on")) go("home");
+}
+
+// ---------- Вкладка «Доступы» (только создатель) ----------
+let CREDS = {}, credsUnsub = null;
+function watchCreds() {
+  if (isAdmin() && Backend.db) {
+    if (credsUnsub) return;
+    credsUnsub = Backend.db.collection("credentials").onSnapshot(snap => {
+      CREDS = {}; snap.forEach(d => { CREDS[d.id] = d.data(); }); renderAccess();
+    }, err => { console.warn("credentials", err); $("#accessBody").innerHTML = `<p class="err">Нет доступа к списку. Проверьте правила Firestore (файл firestore.rules).</p>`; });
+  } else {
+    if (credsUnsub) { credsUnsub(); credsUnsub = null; }
+    CREDS = {}; const el = $("#accessBody"); if (el) el.innerHTML = "";   // данные не остаются на странице
+  }
+}
+function renderAccess() {
+  const rows = Object.values(CREDS).sort((a, b) => String(a.club || a.login).localeCompare(String(b.club || b.login), "ru"));
+  $("#accessBody").innerHTML = rows.length
+    ? `<div class="tw"><table><tr><th class="l">Клуб — тренер</th><th class="l">Логин</th><th class="l">Пароль</th><th></th></tr>${rows.map(r =>
+        `<tr><td class="l">${esc(r.note || r.club || "")}</td><td class="l"><code>${esc(r.login)}</code></td><td class="l"><code>${esc(r.password)}</code></td><td><button class="btn ghost sm" data-copy="${esc(r.login)} ${esc(r.password)}">Копировать</button></td></tr>`).join("")}</table></div>`
+    : `<p class="hint">Список пуст. Откройте setup.html один раз — он сохранит логины и пароли сюда.</p>`;
+}
+function copyCred(el) {
+  const txt = el.dataset.copy;
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => { el.textContent = "Скопировано ✓"; setTimeout(() => el.textContent = "Копировать", 1500); }).catch(() => { el.textContent = txt; });
 }
 
 // ---------- Окно входа ----------
@@ -341,8 +386,8 @@ function entryModal() {
 function coachLoginModal(msg = "") {
   openModal(`<form id="coachForm" class="entry" autocomplete="on">
     <h3>Вход для тренера</h3><p class="hint">Логин и пароль выдаёт администратор лиги</p>
-    <input class="inp" id="cLogin" placeholder="Логин" autocomplete="username" autocapitalize="none" spellcheck="false">
-    <input class="inp" id="cPass" type="password" placeholder="Пароль" autocomplete="current-password">
+    <input class="inp" id="cLogin" name="username" type="text" placeholder="Логин" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <input class="inp" id="cPass" name="password" type="password" placeholder="Пароль" autocomplete="current-password">
     <div class="err" id="cErr">${msg}</div>
     <button class="btn big" type="submit" id="cGo">Войти</button>
     <button class="btn big ghost" type="button" id="coachBack">Назад</button>
@@ -353,10 +398,10 @@ async function coachLogin(login, pw) {
   if (!l || !pw) return "Введите логин и пароль";
   await Backend.init;
   if (!Backend.ready) return "Вход для тренеров пока не подключён администратором.";
-  if (!T(id)) return "Неверный логин или пароль";
+  if (!T(id) && l !== ADMIN_LOGIN) return "Неверный логин или пароль";
   try { await Backend.auth.signInWithEmailAndPassword(`${l}@${COACH_DOMAIN}`, pw); }
   catch (e) { return e.code === "auth/network-request-failed" ? "Нет связи с сервером. Проверьте интернет." : e.code === "auth/too-many-requests" ? "Слишком много попыток. Подождите и попробуйте снова." : "Неверный логин или пароль"; }
-  state.role = "coach"; if (state.fav === undefined) state.fav = id; save();
+  state.role = "coach"; if (T(id)) state.fav = id; else if (state.fav === undefined) state.fav = null; save();
   return null;
 }
 document.addEventListener("submit", async e => {
@@ -365,7 +410,7 @@ document.addEventListener("submit", async e => {
   const btn = $("#cGo"); btn.disabled = true; btn.textContent = "Входим…";
   const err = await coachLogin($("#cLogin").value, $("#cPass").value);
   if (err) { $("#cErr").textContent = err; btn.disabled = false; btn.textContent = "Войти"; return; }
-  applyRole(); renderAll(); closeModal();
+  applyRole(); watchCreds(); renderAll(); closeModal();
 });
 
 // ---------- Состав: просмотр (в стиле карточки матча КХЛ) ----------
@@ -398,7 +443,10 @@ function matchModal(key) {
   const head = `<div class="mh"><div class="mt">${badge(H)}<b>${esc(H.name)}</b></div><div class="mt r"><b>${esc(A.name)}</b>${badge(A)}</div></div>`;
   const body = hd || ad ? lineupsHtml(hd, ad) : `<p class="hint">Составы пока не объявлены</p>`;
   const info = [[H, hd], [A, ad]].map(([t, d]) => d && whenHtml(d) ? `${esc(t.short || t.name)}: обновлён ${whenHtml(d)}` : "").filter(Boolean).join(" · ");
-  const edit = my && (my === m.home || my === m.away) ? `<button class="btn" data-edit="${key}">${(my === m.home ? hd : ad) ? "✏️ Редактировать состав" : "➕ Записать состав"}</button>` : "";
+  const eb = (team, d, label) => `<button class="btn" data-edit="${key}" data-team="${team}">${d ? "✏️ Редактировать состав" : "➕ Записать состав"}${label}</button>`;
+  const edit = isAdmin()
+    ? eb(m.home, hd, ` — ${esc(H.short || H.name)}`) + eb(m.away, ad, ` — ${esc(A.short || A.name)}`)
+    : my && (my === m.home || my === m.away) ? eb(my, my === m.home ? hd : ad, "") : "";
   openModal(`<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
@@ -427,9 +475,12 @@ function edCollect(pos) {
   const box = document.querySelector(`#pRows`); if (!box) return;
   ed.rows[pos] = [...box.querySelectorAll(".erow")].map(r => ({ on: r.querySelector(".ck").checked, n: r.querySelector(".n").value.trim(), name: r.querySelector(".nm").value.trim(), line: r.querySelector(".ln").value, pos }));
 }
-function editorModal(key) {
-  const m = MATCHES.find(x => matchKey(x) === key), my = coachTeam();
+let editTeam = null;   // чей состав сейчас редактируется
+function editorModal(key, team) {
+  const m = MATCHES.find(x => matchKey(x) === key);
+  const my = isAdmin() ? team : coachTeam();   // создатель правит любую из двух команд матча
   if (!m || !my || (m.home !== my && m.away !== my)) return;
+  editTeam = my;
   const d = LU[`${key}__${my}`], cur = new Map((d ? d.players : []).map(p => [p.name, p]));
   const all = knownPlayers(my);
   ed = { key, my, rows: { G: [], D: [], F: [] } };
@@ -462,9 +513,9 @@ function edPicker(pos) {
   currentMatch = ed.key; editing = true;
 }
 async function saveLineup() {
-  const key = currentMatch, my = coachTeam(), msg = $("#eMsg");
+  const key = currentMatch, my = editTeam, msg = $("#eMsg");
   const m = MATCHES.find(x => matchKey(x) === key);
-  if (!m || !my || !ed) return;
+  if (!m || !my || !ed || (!isAdmin() && my !== coachTeam())) return;
   const players = [], nums = new Set();
   for (const pos of ["G", "D", "F"]) for (const r of ed.rows[pos]) {
     if (!r.on || (!r.name && !r.n)) continue;
@@ -487,8 +538,8 @@ async function saveLineup() {
   } catch (e) { btn.disabled = false; msg.textContent = "Не удалось сохранить. Проверьте интернет и что вы вошли как тренер этой команды."; }
 }
 async function clearLineup() {
-  const key = currentMatch, my = coachTeam();
-  if (!key || !my || !confirm("Удалить состав на этот матч?")) return;
+  const key = currentMatch, my = editTeam;
+  if (!key || !my || (!isAdmin() && my !== coachTeam()) || !confirm("Удалить состав на этот матч?")) return;
   try { await Backend.db.collection("lineups").doc(`${key}__${my}`).delete(); matchModal(key); }
   catch (e) { $("#eMsg").textContent = "Не удалось удалить состав."; }
 }
