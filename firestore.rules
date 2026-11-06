@@ -25,6 +25,13 @@ service cloud.firestore {
         || (request.auth != null && id.matches('.*__' + myTeam()));
     }
 
+    // Живой счёт, статус «Идёт» и итог матча: читают все, пишет только создатель.
+    // Id документа: "<матч>", например "t1-ska-cska"
+    match /matches/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Логины и пароли тренеров: видит и меняет только создатель
     match /credentials/{id} {
       allow read, write: if isAdmin();

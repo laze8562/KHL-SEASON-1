@@ -230,3 +230,32 @@ body.mo .modal { max-height: none; overflow: visible; margin: 0 auto; }
 .tg .av.ph { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; background: #9146ff; }
 #access code { font: 13px ui-monospace, Menlo, Consolas, monospace; user-select: all; }
 .btn.sm { padding: 5px 10px; font-size: 13px; margin: 0; white-space: nowrap; }
+
+/* прямой эфир, счёт и управление матчем */
+.btn.watch { display: block; text-align: center; text-decoration: none; background: #9146ff; color: #fff; margin: 0 0 12px; padding: 12px; font-weight: 700; }
+.match.live { border-color: #ff4d4d; }
+.match .lab.live { color: #ff4d4d; animation: blink 1.4s infinite; }
+@keyframes blink { 50% { opacity: .45; } }
+.mscore { text-align: center; margin: 4px 0 10px; }
+.mscore .big { font-size: 40px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
+.mscore small { color: var(--muted); font-weight: 700; }
+.mscore.live small { color: #ff4d4d; }
+.box.adm { margin: 12px 0; }
+.srow { display: grid; grid-template-columns: 1fr 52px 44px 52px; gap: 8px; align-items: center; margin: 8px 0; }
+.srow b { font-size: 24px; text-align: center; }
+.srow .btn { margin: 0; font-size: 22px; padding: 8px 0; }
+select.inp { margin-bottom: 4px; }
+
+/* стартовые пятёрки: светлая площадка, круглые аватары, номер сбоку */
+.rink { position: relative; gap: 4px 0; padding: 14px 4px; border-color: #5b8fd1;
+  background: linear-gradient(#d9534f, #d9534f) 50% 0 / 2px 100% no-repeat, linear-gradient(#5b8fd1, #5b8fd1) 36% 0 / 3px 100% no-repeat, linear-gradient(#5b8fd1, #5b8fd1) 64% 0 / 3px 100% no-repeat, linear-gradient(#d9534f, #d9534f) 9% 0 / 2px 100% no-repeat, linear-gradient(#d9534f, #d9534f) 91% 0 / 2px 100% no-repeat, #f4f6f8; }
+.rink .fo { position: absolute; width: 40px; height: 40px; border: 1.5px solid #d9534f; border-radius: 50%; opacity: .65; }
+.rink .fo1 { left: 17%; top: 12%; } .rink .fo2 { left: 17%; bottom: 12%; }
+.rink .fo3 { right: 17%; top: 12%; } .rink .fo4 { right: 17%; bottom: 12%; }
+.rink .foc { left: calc(50% - 22px); top: calc(50% - 22px); width: 44px; height: 44px; border-color: #5b8fd1; }
+.rink .rc { position: relative; z-index: 1; min-height: 78px; justify-content: flex-start; }
+.rink .rc small { color: #1b2430; font-size: 11px; font-weight: 600; }
+.rc .pa { position: relative; width: 48px; height: 48px; border-radius: 50%; background: #dfe4ea; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); display: flex; align-items: center; justify-content: center; color: #6b7785; font-size: 20px; }
+.rc .pa .pb { position: absolute; top: 50%; transform: translateY(-50%); min-width: 28px; height: 28px; font-size: 13px; border: 2px solid #fff; }
+.rc.h .pa .pb { left: -16px; }
+.rc.a .pa .pb { right: -16px; }

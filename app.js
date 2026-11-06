@@ -15,8 +15,22 @@ const fmtDate = d => new Date(d + "T00:00").toLocaleDateString("ru-RU", { day: "
 
 // ---------- Расчёт таблицы ----------
 function standings(conf) {
-  // таблица берётся из STANDINGS в data.js (вручную)
-  return STANDINGS[conf].map(([id, gp, w, otw, pts]) => ({ t: T(id), gp, w, otw, pts }));
+  // база — STANDINGS в data.js (вручную) + матчи, которые создатель завершил на сайте
+  // (учитываются только те, которых ещё нет в data.js, чтобы не считать дважды)
+  const rows = STANDINGS[conf].map(([id, gp, w, otw, pts], i) => ({ t: T(id), gp, w, otw, pts, i }));
+  const by = {}; rows.forEach(r => { if (r.t) by[r.t.id] = r; });
+  let changed = false;
+  MATCHES.filter(m => m.liveFinal && m.stage === "regular").forEach(m => {
+    const homeWon = m.hs > m.as;
+    [[by[m.home], homeWon], [by[m.away], !homeWon]].forEach(([r, won]) => {
+      if (!r) return;
+      r.gp++; changed = true;
+      if (won) { if (m.ot) { r.otw++; r.pts += 2; } else { r.w++; r.pts += 3; } }   // победа 3, победа в ОТ/буллитах 2
+      else if (m.ot) r.pts += 1;                                                       // поражение в ОТ/буллитах 1
+    });
+  });
+  if (changed) rows.sort((a, b) => b.pts - a.pts || (b.w + b.otw) - (a.w + a.otw) || a.i - b.i);
+  return rows;
 }
 // запасной вариант: автоматический расчёт по матчам (сейчас не используется)
 function standingsCalc(conf) {
@@ -90,7 +104,7 @@ function renderHome() {
   const el = $("#nextMatch");
   if (!fav) { el.innerHTML = `<span class="hint">Выберите клуб в настройках ⚙</span>`; }
   else {
-    const m = MATCHES.filter(m => m.hs === null && (m.home === fav.id || m.away === fav.id)).sort((a, b) => (a.tour || 0) - (b.tour || 0) || (a.date || "").localeCompare(b.date || ""))[0];
+    const m = MATCHES.filter(m => (m.hs === null || m.live) && (m.home === fav.id || m.away === fav.id)).sort((a, b) => (a.tour || 0) - (b.tour || 0) || (a.date || "").localeCompare(b.date || ""))[0];
     el.innerHTML = m ? matchHtml(m) : `<span class="hint">У клуба «${fav.name}» пока нет запланированных матчей</span>`;
   }
   $("#homeNews").innerHTML = sortedNews().slice(0, 4).map(newsCard).join("");
@@ -107,11 +121,11 @@ function lineupChip(m) {
   return "";
 }
 function matchHtml(m) {
-  const sc = m.hs === null ? "—" : `${m.hs}:${m.as}${m.ot ? "<br><small>ОТ</small>" : ""}`;
+  const sc = m.hs === null ? "—" : `${m.hs}:${m.as}${m.ot ? `<br><small>${typeof m.ot === "string" ? m.ot : "ОТ"}</small>` : ""}`;
   const when = m.date ? `${fmtDate(m.date)} · ${m.time}` : `Тур ${m.tour}`;
-  const lab = m.label ? `<div class="lab">${m.label}</div>` : "";
+  const lab = (m.live ? `<div class="lab live">● Идёт</div>` : "") + (m.label ? `<div class="lab">${m.label}</div>` : "");
   const key = matchKey(m);
-  return `<div class="match${m.label ? " derby" : ""}${key ? " clickable" : ""}"${key ? ` data-mk="${key}"` : ""}>${lab}<div class="d">${when}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}${lineupChip(m)}</div>`;
+  return `<div class="match${m.label ? " derby" : ""}${m.live ? " live" : ""}${key ? " clickable" : ""}"${key ? ` data-mk="${key}"` : ""}>${lab}<div class="d">${when}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}${lineupChip(m)}</div>`;
 }
 const regular = () => MATCHES.filter(m => m.stage === "regular");
 const tourCount = () => Math.max(0, ...regular().map(m => m.tour || 0));
@@ -126,7 +140,7 @@ function renderSchedule() {
   bar.style.display = "";
   const n = tourCount();
   if (ui.tour === null) {
-    const open = regular().find(m => m.hs === null);
+    const open = regular().find(m => m.hs === null || m.live);
     ui.tour = open ? open.tour : n;
   }
   ui.tour = Math.min(Math.max(1, ui.tour), n || 1);
@@ -260,6 +274,7 @@ document.addEventListener("click", e => {
   const mk = e.target.closest("[data-mk]"); if (mk && !e.target.closest("a")) matchModal(mk.dataset.mk);
   const de = e.target.closest("[data-edit]"); if (de) editorModal(de.dataset.edit, de.dataset.team);
   const cp = e.target.closest("[data-copy]"); if (cp) copyCred(cp);
+  const ms = e.target.closest("[data-ms]"); if (ms) matchAction(ms.dataset.ms);
   const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
   if (e.target.id === "pAdd") { const pos = $("#pRows").dataset.pos; edCollect(pos); ed.rows[pos].push({ pos, n: "", name: "", on: true, line: "" }); edPicker(pos); }
   if (e.target.id === "pDone") { edCollect($("#pRows").dataset.pos); edMain(); }
@@ -300,6 +315,62 @@ const COACH_DOMAIN = "khl-s1.app";
 const SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const Backend = { ready: false, auth: null, db: null, user: null, authKnown: false, init: null };
 let LU = {};   // составы: { "t1-ska-cska__ska": {players:[...], ...} }
+let LM = {};   // живые матчи: { "t1-ska-cska": {status:"live"|"final", hs, as, ot} }
+const TWITCH_URL = "https://www.twitch.tv/khltvlive";
+
+// накладываем живой счёт на расписание; без записи в базе матч возвращается к данным из data.js
+function applyLive() {
+  MATCHES.forEach(m => {
+    const k = matchKey(m); if (!k) return;
+    if (!m._o) m._o = { hs: m.hs, as: m.as, ot: m.ot };
+    const d = LM[k];
+    if (d && (d.status === "live" || d.status === "final")) {
+      m.hs = d.hs || 0; m.as = d.as || 0; m.ot = d.ot || false;
+      m.live = d.status === "live";
+      m.liveFinal = d.status === "final" && m._o.hs === null;   // идёт в таблицу, только если результата нет в data.js
+    } else { m.hs = m._o.hs; m.as = m._o.as; m.ot = m._o.ot; m.live = false; m.liveFinal = false; }
+  });
+}
+// перерисовать открытое окно матча, не сбрасывая прокрутку
+function refreshModal() {
+  if (currentMatch && !editing && $("#overlay").classList.contains("on")) { const y = window.scrollY; matchModal(currentMatch); window.scrollTo(0, y); }
+}
+// панель управления матчем (только создатель)
+function adminPanel(key, m) {
+  const d = LM[key], H = T(m.home), A = T(m.away);
+  if (!d) return `<div class="box adm"><h3>Управление матчем</h3><button class="btn big" data-ms="start">▶ Начать матч</button></div>`;
+  const row = (t, p, mi, pl) => `<div class="srow"><span>${esc(t.short || t.name)}</span><button class="btn ghost" data-ms="${mi}">−</button><b>${p}</b><button class="btn" data-ms="${pl}">+</button></div>`;
+  if (d.status === "live") return `<div class="box adm"><h3>Матч идёт</h3>
+    ${row(H, d.hs || 0, "hm", "hp")}${row(A, d.as || 0, "am", "ap")}
+    <select class="inp" id="otSel"><option value="">Закончился в основное время</option><option value="ОТ">Закончился в овертайме</option><option value="Б">Закончился по буллитам</option></select>
+    <div class="err" id="msErr"></div>
+    <button class="btn big" data-ms="finish">🏁 Завершить матч</button>
+    <button class="btn big ghost" data-ms="reset">Отменить матч</button></div>`;
+  return `<div class="box adm"><h3>Матч завершён</h3><p class="hint">Результат учтён в турнирной таблице.</p>
+    <button class="btn" data-ms="reopen">↩ Вернуть в игру (править счёт)</button>
+    <button class="btn ghost" data-ms="reset">Сбросить результат</button></div>`;
+}
+async function matchAction(act) {
+  if (!isAdmin() || !Backend.db || !currentMatch) return;
+  const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key); if (!m) return;
+  const ref = Backend.db.collection("matches").doc(key), cur = LM[key];
+  const stamp = firebase.firestore.FieldValue.serverTimestamp();
+  try {
+    if (act === "start") await ref.set({ home: m.home, away: m.away, tour: m.tour, status: "live", hs: 0, as: 0, ot: "", updatedAt: stamp });
+    else if (!cur) return;
+    else if (["hp", "hm", "ap", "am"].includes(act)) {
+      const hs = Math.max(0, (cur.hs || 0) + (act === "hp" ? 1 : act === "hm" ? -1 : 0));
+      const as = Math.max(0, (cur.as || 0) + (act === "ap" ? 1 : act === "am" ? -1 : 0));
+      await ref.update({ hs, as, updatedAt: stamp });
+    }
+    else if (act === "finish") {
+      if ((cur.hs || 0) === (cur.as || 0)) { const er = $("#msErr"); if (er) er.textContent = "Счёт равный: в хоккее ничьей не бывает. Исправьте счёт."; return; }
+      await ref.update({ status: "final", ot: ($("#otSel") || {}).value || "", updatedAt: stamp });
+    }
+    else if (act === "reopen") await ref.update({ status: "live", updatedAt: stamp });
+    else if (act === "reset") { if (!confirm("Сбросить матч? Счёт и результат будут удалены.")) return; await ref.delete(); }
+  } catch (e) { alert("Не удалось сохранить. Проверьте интернет и что правила Firestore обновлены (файл firestore.rules)."); }
+}
 
 function loadScript(src) {
   return new Promise((ok, fail) => {
@@ -317,8 +388,14 @@ async function initBackend() {
     Backend.db.collection("lineups").onSnapshot(snap => {
       LU = {}; snap.forEach(d => { LU[d.id] = d.data(); });
       renderSchedule(); renderHome();
-      if (currentMatch && !editing && $("#overlay").classList.contains("on")) matchModal(currentMatch);
+      refreshModal();
     }, err => console.warn("lineups", err));
+    // живые матчи: статус «Идёт», счёт и итог (пишет только создатель)
+    Backend.db.collection("matches").onSnapshot(snap => {
+      LM = {}; snap.forEach(d => { LM[d.id] = d.data(); });
+      applyLive(); renderHome(); renderSchedule(); renderTable();
+      refreshModal();
+    }, err => console.warn("matches", err));
     Backend.auth.onAuthStateChanged(u => {
       Backend.user = u; const first = !Backend.authKnown; Backend.authKnown = true;
       if (first && state.role === "coach" && !u) { delete state.role; save(); applyRole(); entryModal(); }
@@ -417,13 +494,17 @@ document.addEventListener("submit", async e => {
 const splitName = s => { s = String(s || "").trim(); const i = s.indexOf(" "); return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)]; };
 const byPos = (d, p) => d ? (d.players || []).filter(x => x.pos === p).sort((a, b) => (a.line || 9) - (b.line || 9) || a.n - b.n) : [];
 const whenHtml = d => { try { return d && d.updatedAt && d.updatedAt.toDate ? d.updatedAt.toDate().toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""; } catch (_) { return ""; } };
-const rc = x => x ? `<div class="rc"><span class="pb">${esc(x.n)}</span><small>${esc(splitName(x.name)[0])}</small></div>` : `<div class="rc"></div>`;
+// игрок на льду: круглый аватар, номер сбоку (у хозяев слева, у гостей справа), фамилия под ним
+const rc = (x, side) => x
+  ? `<div class="rc ${side}"><span class="pa"><b>${esc(splitName(x.name)[0].charAt(0))}</b><span class="pb">${esc(x.n)}</span></span><small>${esc(splitName(x.name)[0])}</small></div>`
+  : `<div class="rc"></div>`;
 function rinkHtml(hd, ad) {
   const col = d => { const g = byPos(d, "G")[0], D = byPos(d, "D"), F = byPos(d, "F"); return { out: [D[0], g, D[1]], inn: [F[0], F[1], F[2]] }; };
   const h = col(hd), a = col(ad);
   let cells = "";
-  for (let r = 0; r < 3; r++) cells += rc(h.out[r]) + rc(h.inn[r]) + rc(a.inn[r]) + rc(a.out[r]);
-  return `<div class="lgh"><span>Стартовые пятёрки</span></div><div class="rink">${cells}</div>`;
+  for (let r = 0; r < 3; r++) cells += rc(h.out[r], "h") + rc(h.inn[r], "h") + rc(a.inn[r], "a") + rc(a.out[r], "a");
+  const deco = `<i class="fo fo1"></i><i class="fo fo2"></i><i class="fo fo3"></i><i class="fo fo4"></i><i class="fo foc"></i>`;
+  return `<div class="lgh"><span>Стартовые пятёрки</span></div><div class="rink">${deco}${cells}</div>`;
 }
 function pairsHtml(title, ha, aa) {
   const n = Math.max(ha.length, aa.length); if (!n) return "";
@@ -447,7 +528,9 @@ function matchModal(key) {
   const edit = isAdmin()
     ? eb(m.home, hd, ` — ${esc(H.short || H.name)}`) + eb(m.away, ad, ` — ${esc(A.short || A.name)}`)
     : my && (my === m.home || my === m.away) ? eb(my, my === m.home ? hd : ad, "") : "";
-  openModal(`<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
+  const watch = `<a class="btn watch" href="${TWITCH_URL}" target="_blank" rel="noopener">📺 Смотреть игру</a>`;
+  const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small></div>`;
+  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 
