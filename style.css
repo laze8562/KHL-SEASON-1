@@ -296,3 +296,9 @@ button.pcirc { cursor: pointer; }
 .vplayer { margin: 8px 0; border-radius: 10px; overflow: hidden; background: #000; }
 .vplayer video { width: 100%; max-height: 60vh; display: block; }
 button.gplay { border: 0; cursor: pointer; }
+
+.rink .rc { min-height: 84px; justify-content: flex-start; }
+.rink .rc small { display: block; text-align: center; line-height: 1.15; font-size: 10.5px; font-weight: 700; color: #1b2430; white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
+.tg.donate { border-color: #ff5a7a; background: linear-gradient(90deg, rgba(255,90,122,.16), var(--panel)); }
+.tg.donate .dh { width: 44px; height: 44px; border-radius: 50%; background: #ff5a7a; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; flex: none; }
+.tg.donate b { color: #ff5a7a; }

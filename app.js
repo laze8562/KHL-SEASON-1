@@ -629,7 +629,7 @@ const whenHtml = d => { try { return d && d.updatedAt && d.updatedAt.toDate ? d.
 // игрок на льду: круглый аватар, номер сбоку (у хозяев слева, у гостей справа), фамилия под ним
 const SIL = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="18" r="8"/><path d="M8 46c0-10 7-16 16-16s16 6 16 16z"/></svg>`;
 const rc = (x, side) => x
-  ? `<div class="rc ${side}"><span class="pa">${x.photo ? `<img src="${esc(x.photo)}" alt="">` : SIL}<span class="pb">${esc(x.n)}</span></span></div>`
+  ? `<div class="rc ${side}"><span class="pa">${x.photo ? `<img src="${esc(x.photo)}" alt="">` : SIL}<span class="pb">${esc(x.n)}</span></span><small>${esc(splitName(x.name)[0])}${splitName(x.name)[1] ? "<br>" + esc(splitName(x.name)[1]) : ""}</small></div>`
   : `<div class="rc"></div>`;
 function rinkHtml(hd, ad) {
   const col = d => { const g = byPos(d, "G")[0], D = byPos(d, "D"), F = byPos(d, "F"); return { out: [D[0], g, D[1]], inn: [F[0], F[1], F[2]] }; };
