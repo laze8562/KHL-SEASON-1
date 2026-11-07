@@ -195,7 +195,7 @@ const openModal = (html, lock = false) => {
 };
 let modalScroll = 0;
 const closeModal = () => {
-  modalLocked = false; editing = false; currentMatch = null;
+  modalLocked = false; editing = false; currentMatch = null; pendingVideo = null;
   $("#overlay").classList.remove("on", "locked");
   if (document.body.classList.contains("mo")) { document.body.classList.remove("mo"); window.scrollTo(0, modalScroll); }
 };
@@ -277,6 +277,8 @@ document.addEventListener("click", e => {
   const ms = e.target.closest("[data-ms]"); if (ms) matchAction(ms.dataset.ms);
   const ga = e.target.closest("[data-gadd]"); if (ga) goalAdd();
   const gd = e.target.closest("[data-gdel]"); if (gd) goalDel(gd.dataset.gdel);
+  const vp = e.target.closest("[data-vplay]"); if (vp) playVideo(vp.dataset.vplay);
+  if (e.target.closest("[data-vclear]")) { pendingVideo = null; setVid(); }
   const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
   if (e.target.id === "pAdd") { const pos = $("#pRows").dataset.pos; edCollect(pos); ed.rows[pos].push({ pos, n: "", name: "", on: true, line: "" }); edPicker(pos); }
   if (e.target.id === "pDone") { edCollect($("#pRows").dataset.pos); edMain(); }
@@ -286,6 +288,12 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("change", e => {
   if (e.target.id === "colorOn") { state.color = e.target.checked; save(); applyAccent(); }
+  if (e.target.id === "gFile") {
+    const f = e.target.files && e.target.files[0], er = $("#gErr"); if (!f) return;
+    if (!/^video\//.test(f.type) && !/\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(f.name)) { er.textContent = "Выберите видеофайл"; return; }
+    if (f.size > MAX_VIDEO) { er.textContent = "Файл больше 100 МБ. Обрежьте момент гола или сожмите видео."; return; }
+    er.textContent = ""; pendingVideo = f; setVid();
+  }
 });
 
 // запуск вынесен в конец файла (после блока составов)
@@ -315,8 +323,9 @@ document.querySelectorAll("img[data-twitch]").forEach(i => {
 // ======================================================================
 const COACH_DOMAIN = "khl-s1.app";
 const SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
-const Backend = { ready: false, auth: null, db: null, user: null, authKnown: false, init: null };
+const Backend = { ready: false, auth: null, db: null, storage: null, user: null, authKnown: false, init: null };
 let LU = {};   // составы: { "t1-ska-cska__ska": {players:[...], ...} }
+let pendingVideo = null, upPct = null;   // видео гола: выбранный файл и процент загрузки
 let LM = {};   // живые матчи: { "t1-ska-cska": {status:"live"|"final", hs, as, ot} }
 const TWITCH_URL = "https://www.twitch.tv/khltvlive";
 
@@ -366,7 +375,8 @@ function goalsHtml(d, admin) {
   const rows = list.map(g => {
     if (g.team === "away") a++; else h++;
     const sc = g.team === "away" ? `<span class="dim">${h}</span>:<b>${a}</b>` : `<b>${h}</b>:<span class="dim">${a}</span>`;
-    const play = g.v && /^https?:\/\//i.test(g.v) ? `<a class="gplay" href="${esc(g.v)}" target="_blank" rel="noopener" aria-label="Смотреть момент">▶</a>` : "";
+    const okv = g.v && /^https?:\/\//i.test(g.v);
+    const play = !okv ? "" : g.vf ? `<button type="button" class="gplay" data-vplay="${esc(g.v)}" aria-label="Смотреть момент">▶</button>` : `<a class="gplay" href="${esc(g.v)}" target="_blank" rel="noopener" aria-label="Смотреть момент">▶</a>`;
     const del = admin ? `<button type="button" class="gdel" data-gdel="${esc(g.id)}" aria-label="Удалить гол">✕</button>` : "";
     return `<div class="gr"><div class="gt">${esc(g.t || "")}<small>${esc(g.st || (g.per === "ОТ" || g.per === "Б" ? g.per : ""))}</small></div><div class="gs">${sc}</div><div class="gw"><b>${esc(g.p)}</b>${g.a ? `<span>${esc(g.a)}</span>` : ""}</div>${play}${del}</div>`;
   }).join("");
@@ -381,7 +391,8 @@ function goalsAdmin(m, d) {
     <select class="inp" id="gStr"><option value="РАВ">РАВ — равные составы</option><option value="БОЛ">БОЛ — большинство</option><option value="МЕН">МЕН — меньшинство</option><option value="">Не указывать</option></select>
     <input class="inp" id="gP" placeholder="Кто забил: 77. Зуган Д." autocomplete="off">
     <input class="inp" id="gAs" placeholder="Передачи: 37. Сукезе Н., 27. Менелл Б." autocomplete="off">
-    <input class="inp" id="gV" placeholder="Ссылка на видео (необязательно)" inputmode="url" autocomplete="off">
+    <div id="gVid">${vidPick()}</div>
+    <input class="inp" id="gV" placeholder="Или ссылка на видео (необязательно)" inputmode="url" autocomplete="off">
     <div class="err" id="gErr"></div>
     <button class="btn big" data-gadd="1" type="button">➕ Добавить гол</button></div>`;
 }
@@ -436,21 +447,59 @@ async function matchAction(act) {
     }
   } catch (e) { alert("Не удалось сохранить. Проверьте интернет и что правила Firestore обновлены (файл firestore.rules)."); }
 }
+const MAX_VIDEO = 100 * 1024 * 1024;   // 100 МБ (то же число в storage.rules)
+function vidPick() {
+  if (upPct !== null) return `<div class="vchip">⏫ Загрузка видео… ${upPct}%<i style="width:${upPct}%"></i></div>`;
+  if (pendingVideo) return `<div class="vchip">🎬 ${esc(pendingVideo.name)} · ${(pendingVideo.size / 1048576).toFixed(1)} МБ<button type="button" class="gdel" data-vclear="1" aria-label="Убрать видео">✕</button></div>`;
+  return `<label class="btn ghost vpick">🎬 Выбрать видео с телефона<input type="file" id="gFile" accept="video/*" hidden></label>`;
+}
+const setVid = () => { const e = $("#gVid"); if (e) e.innerHTML = vidPick(); };
+// просмотр загруженного видео прямо на сайте
+function playVideo(url) {
+  if (!/^https:\/\//i.test(url || "")) return;
+  const o = document.createElement("div"); o.className = "vlay";
+  o.innerHTML = `<button type="button" class="vx" aria-label="Закрыть">✕</button><video controls autoplay playsinline src="${esc(url)}"></video>`;
+  o.addEventListener("click", e => { if (e.target === o || e.target.classList.contains("vx")) { const v = o.querySelector("video"); if (v) v.pause(); o.remove(); } });
+  document.body.appendChild(o);
+}
 async function goalAdd() {
-  if (!isAdmin() || !Backend.db || !currentMatch) return;
+  if (!isAdmin() || !Backend.db || !currentMatch || upPct !== null) return;
   const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key), er = $("#gErr"); if (!m) return;
   const p = $("#gP").value.trim(), v = $("#gV").value.trim();
   if (!p) { er.textContent = "Укажите, кто забил"; return; }
   if (v && !/^https?:\/\//i.test(v)) { er.textContent = "Ссылка на видео должна начинаться с https://"; return; }
   const g = { id: String(Date.now()), team: $("#gTeam").value, per: $("#gPer").value, t: $("#gTime").value.trim(), st: $("#gStr").value, p, a: $("#gAs").value.trim(), v };
+  const file = pendingVideo;
+  if (file) {
+    if (!Backend.storage) { er.textContent = "Хранилище видео не подключено. Включите Storage в Firebase (см. инструкцию) или вставьте ссылку."; return; }
+    const path = `goals/${key}/${g.id}-${file.name.replace(/[^\w.\-]+/g, "_")}`;
+    try {
+      er.textContent = ""; upPct = 0; setVid();
+      const ref = Backend.storage.ref(path);
+      await new Promise((ok, fail) => {
+        const task = ref.put(file, { contentType: file.type || "video/mp4" });
+        task.on("state_changed", sn => { upPct = Math.round(sn.bytesTransferred / sn.totalBytes * 100); setVid(); }, fail, ok);
+      });
+      g.v = await ref.getDownloadURL(); g.vf = 1; g.vp = path;
+    } catch (e) {
+      upPct = null; setVid();
+      const er2 = $("#gErr"); if (er2) er2.textContent = "Не удалось загрузить видео. Проверьте интернет и что в Firebase включён Storage с правилами из storage.rules.";
+      return;
+    }
+    upPct = null; pendingVideo = null;
+  }
   const goals = [...((LM[key] && LM[key].goals) || []), g].slice(0, 60);
-  try { await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, goals }, { merge: true }); }
-  catch (e) { er.textContent = "Не удалось сохранить. Проверьте правила Firestore."; }
+  try { await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, goals }, { merge: true }); setVid(); }
+  catch (e) { const er2 = $("#gErr"); if (er2) er2.textContent = "Не удалось сохранить. Проверьте правила Firestore."; }
 }
 async function goalDel(id) {
   const key = currentMatch; if (!isAdmin() || !key || !LM[key] || !confirm("Удалить этот гол?")) return;
+  const old = (LM[key].goals || []).find(g => g.id === id);
   const goals = (LM[key].goals || []).filter(g => g.id !== id);
-  try { await Backend.db.collection("matches").doc(key).update({ goals }); } catch (e) { alert("Не удалось удалить гол."); }
+  try {
+    await Backend.db.collection("matches").doc(key).update({ goals });
+    if (old && old.vp && Backend.storage) Backend.storage.ref(old.vp).delete().catch(() => {});   // чистим файл, чтобы не занимал место
+  } catch (e) { alert("Не удалось удалить гол."); }
 }
 
 function loadScript(src) {
@@ -464,8 +513,10 @@ async function initBackend() {
   try {
     await loadScript(SDK + "firebase-app-compat.js");
     await Promise.all([loadScript(SDK + "firebase-auth-compat.js"), loadScript(SDK + "firebase-firestore-compat.js")]);
+    await loadScript(SDK + "firebase-storage-compat.js").catch(() => {});   // хранилище видео; если не загрузилось, остальное работает
     firebase.initializeApp(FIREBASE_CONFIG);
     Backend.auth = firebase.auth(); Backend.db = firebase.firestore(); Backend.ready = true;
+    try { Backend.storage = firebase.storage(); } catch (_) { Backend.storage = null; }
     Backend.db.collection("lineups").onSnapshot(snap => {
       LU = {}; snap.forEach(d => { LU[d.id] = d.data(); });
       renderSchedule(); renderHome();
@@ -576,8 +627,9 @@ const splitName = s => { s = String(s || "").trim(); const i = s.indexOf(" "); r
 const byPos = (d, p) => d ? (d.players || []).filter(x => x.pos === p).sort((a, b) => (a.line || 9) - (b.line || 9) || a.n - b.n) : [];
 const whenHtml = d => { try { return d && d.updatedAt && d.updatedAt.toDate ? d.updatedAt.toDate().toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""; } catch (_) { return ""; } };
 // игрок на льду: круглый аватар, номер сбоку (у хозяев слева, у гостей справа), фамилия под ним
+const SIL = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="18" r="8"/><path d="M8 46c0-10 7-16 16-16s16 6 16 16z"/></svg>`;
 const rc = (x, side) => x
-  ? `<div class="rc ${side}"><span class="pa"><b>${esc(splitName(x.name)[0].charAt(0))}</b><span class="pb">${esc(x.n)}</span></span><small>${esc(splitName(x.name)[0])}</small></div>`
+  ? `<div class="rc ${side}"><span class="pa">${x.photo ? `<img src="${esc(x.photo)}" alt="">` : SIL}<span class="pb">${esc(x.n)}</span></span></div>`
   : `<div class="rc"></div>`;
 function rinkHtml(hd, ad) {
   const col = d => { const g = byPos(d, "G")[0], D = byPos(d, "D"), F = byPos(d, "F"); return { out: [D[0], g, D[1]], inn: [F[0], F[1], F[2]] }; };
