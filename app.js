@@ -122,7 +122,12 @@ function withPresets(lu) {
     const key = matchKey(m);
     [m.home, m.away].forEach(id => {
       const id2 = `${key}__${id}`;
-      if (!out[id2] && src[id]) out[id2] = { team: id, match: key, tour: m.tour, home: m.home, away: m.away, players: src[id].map(p => ({ ...p })), preset: true };
+      if (out[id2]) return;   // состав на этот матч уже сохранён на сайте
+      // приоритет: сохранённый на сайте состав клуба из прошлых туров (самый свежий) → заготовка из data.js
+      let prev = null;
+      Object.values(lu).forEach(d => { if (d && !d.preset && d.team === id && d.tour < m.tour && (d.players || []).length && (!prev || d.tour > prev.tour)) prev = d; });
+      if (prev) out[id2] = { team: id, match: key, tour: m.tour, home: m.home, away: m.away, players: prev.players.map(p => ({ ...p })), preset: true };
+      else if (src[id]) out[id2] = { team: id, match: key, tour: m.tour, home: m.home, away: m.away, players: src[id].map(p => ({ ...p })), preset: true };
     });
   });
   return out;
