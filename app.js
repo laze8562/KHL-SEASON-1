@@ -116,11 +116,13 @@ function withPresets(lu) {
   if (typeof PRESET_LINEUPS === "undefined") return lu;
   const out = { ...lu };
   MATCHES.forEach(m => {
-    if (m.tour !== PRESET_TOUR) return;
+    // составы тура: из PRESET_BY_TOUR (если задан), иначе старый вариант: PRESET_LINEUPS для тура PRESET_TOUR
+    const src = (typeof PRESET_BY_TOUR !== "undefined" && PRESET_BY_TOUR[m.tour]) || (m.tour === PRESET_TOUR ? PRESET_LINEUPS : null);
+    if (!src) return;
     const key = matchKey(m);
     [m.home, m.away].forEach(id => {
       const id2 = `${key}__${id}`;
-      if (!out[id2] && PRESET_LINEUPS[id]) out[id2] = { team: id, match: key, tour: m.tour, home: m.home, away: m.away, players: PRESET_LINEUPS[id].map(p => ({ ...p })), preset: true };
+      if (!out[id2] && src[id]) out[id2] = { team: id, match: key, tour: m.tour, home: m.home, away: m.away, players: src[id].map(p => ({ ...p })), preset: true };
     });
   });
   return out;
