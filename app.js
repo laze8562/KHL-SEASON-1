@@ -294,6 +294,8 @@ document.addEventListener("click", e => {
   const vp = e.target.closest("[data-vplay]"); if (vp) playVideo(vp.dataset.vplay);
   if (e.target.closest("[data-vclear]")) { pendingVideo = null; setVid(); }
   const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
+  const fd = e.target.closest("[data-found]");
+  if (fd) { const [pos, i] = fd.dataset.found.split(":"); const r = ed.rows[pos][+i]; r.on = true; edPicker(pos, String(r.n || r.name)); return; }
   if (e.target.id === "pAdd") { const pos = $("#pRows").dataset.pos; edCollect(pos); ed.rows[pos].push({ pos, n: "", name: "", on: true, line: "" }); edPicker(pos); }
   if (e.target.id === "pDone") { edCollect($("#pRows").dataset.pos); edMain(); }
   if (e.target.id === "eSave") saveLineup();
@@ -707,6 +709,25 @@ function edCollect(pos) {
   const box = document.querySelector(`#pRows`); if (!box) return;
   ed.rows[pos] = [...box.querySelectorAll(".erow")].map(r => ({ on: r.querySelector(".ck").checked, n: r.querySelector(".n").value.trim(), name: r.querySelector(".nm").value.trim(), line: r.querySelector(".ln").value, pos }));
 }
+const qn = v => String(v ?? "").toLowerCase().replace(/ё/g, "е").trim();
+const qHit = (p, q) => !q || qn(p.n).startsWith(q) || qn(p.name).includes(q) || q.split(/\s+/).every(w => qn(p.n) === w || qn(p.name).includes(w));
+function pFilter() {
+  const q = qn(($("#pSearch") || {}).value || "");
+  document.querySelectorAll("#pRows .erow").forEach(r => {
+    const hit = qHit({ n: r.querySelector(".n").value, name: r.querySelector(".nm").value }, q);
+    r.style.display = hit ? "" : "none";
+  });
+}
+function eFind() {
+  const box = $("#eFound"); if (!box) return;
+  const q = qn($("#eSearch").value);
+  if (!q) { box.innerHTML = ""; return; }
+  const res = [];
+  for (const pos of ["G", "D", "F"]) ed.rows[pos].forEach((p, i) => { if (qHit(p, q)) res.push([pos, i, p]); });
+  box.innerHTML = res.length
+    ? res.slice(0, 8).map(([pos, i, p]) => `<button class="btn ghost foundbtn" type="button" data-found="${pos}:${i}"><b>${esc(p.n || "–")}</b> ${esc(p.name)} <small>${p.on ? "✓ в составе · " : ""}${{ G: "вратарь", D: "защитник", F: "нападающий" }[pos]}</small></button>`).join("")
+    : `<p class="hint">Никого не найдено</p>`;
+}
 let editTeam = null;   // чей состав сейчас редактируется
 function editorModal(key, team) {
   const m = MATCHES.find(x => matchKey(x) === key);
@@ -729,20 +750,24 @@ function edMain() {
       (sel.length ? `<div class="sel">${sel.map(p => `<span><b>${esc(p.n)}</b> ${esc(splitName(p.name)[0])}</span>`).join("")}</div>` : "");
   }).join("");
   openModal(`<h3>Состав: ${T(ed.my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
-    <p class="hint">Нажмите на раздел, чтобы выбрать игроков из списка команды.</p>
+    <input class="inp" id="eSearch" type="search" placeholder="🔍 Поиск игрока: номер, имя или фамилия" autocomplete="off">
+    <div id="eFound"></div>
+    <p class="hint">Или нажмите на раздел, чтобы выбрать игроков из списка команды.</p>
     ${blocks}
     <div class="err" id="eMsg"></div>
     <div><button class="btn" id="eSave" type="button">Сохранить</button><button class="btn ghost" id="eCancel" type="button">Назад</button>${d ? `<button class="btn ghost" id="eClear" type="button">Очистить</button>` : ""}</div>`);
   currentMatch = ed.key; editing = true;
 }
-function edPicker(pos) {
+function edPicker(pos, q) {
   const rows = ed.rows[pos];
   openModal(`<h3>${POSN[pos]}: ${T(ed.my).name}</h3>
     <p class="hint">Отметьте игроков, которые выходят на матч, и выберите ${pos === "G" ? "роль" : pos === "D" ? "пару" : "звено"}.${rows.length ? "" : " Список пока пуст: добавьте игроков кнопкой ниже, дальше они будут в списке всегда."}</p>
+    <input class="inp" id="pSearch" type="search" placeholder="🔍 Поиск: номер, имя или фамилия" autocomplete="off" value="${esc(q || "")}">
     <div id="pRows" data-pos="${pos}">${rows.map(p => rowHtml(p)).join("")}</div>
     <button class="btn ghost" id="pAdd" type="button">+ Добавить игрока</button>
     <div><button class="btn" id="pDone" type="button">Готово</button></div>`);
   currentMatch = ed.key; editing = true;
+  if (q) pFilter();
 }
 async function saveLineup() {
   const key = currentMatch, my = editTeam, msg = $("#eMsg");
@@ -790,4 +815,6 @@ Backend.init = initBackend();
   else if (state.fav === undefined) pickerModal();
 })();
 
-document.addEventListener("input", e => { const r = e.target.closest && e.target.closest(".erow"); if (r && e.target.matches(".n,.nm")) r.querySelector(".ck").checked = true; });
+document.addEventListener("input", e => {
+  if (e.target.id === "pSearch") return pFilter();
+  if (e.target.id === "eSearch") return eFind(); const r = e.target.closest && e.target.closest(".erow"); if (r && e.target.matches(".n,.nm")) r.querySelector(".ck").checked = true; });
