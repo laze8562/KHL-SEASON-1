@@ -111,6 +111,20 @@ function renderHome() {
 }
 
 const matchKey = m => m.tour ? `t${m.tour}-${m.home}-${m.away}` : null;
+// Готовые составы из data.js (PRESET_LINEUPS) подставляются, если на сайте для матча ещё нет сохранённого состава
+function withPresets(lu) {
+  if (typeof PRESET_LINEUPS === "undefined") return lu;
+  const out = { ...lu };
+  MATCHES.forEach(m => {
+    if (m.tour !== PRESET_TOUR) return;
+    const key = matchKey(m);
+    [m.home, m.away].forEach(id => {
+      const id2 = `${key}__${id}`;
+      if (!out[id2] && PRESET_LINEUPS[id]) out[id2] = { team: id, match: key, tour: m.tour, home: m.home, away: m.away, players: PRESET_LINEUPS[id].map(p => ({ ...p })), preset: true };
+    });
+  });
+  return out;
+}
 function lineupChip(m) {
   const key = matchKey(m); if (!key) return "";
   const my = coachTeam();
@@ -324,7 +338,7 @@ document.querySelectorAll("img[data-twitch]").forEach(i => {
 const COACH_DOMAIN = "khl-s1.app";
 const SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const Backend = { ready: false, auth: null, db: null, storage: null, user: null, authKnown: false, init: null };
-let LU = {};   // составы: { "t1-ska-cska__ska": {players:[...], ...} }
+let LU = {};   // (в начале файла заполняется withPresets) составы: { "t1-ska-cska__ska": {players:[...], ...} }
 let pendingVideo = null, upPct = null;   // видео гола: выбранный файл и процент загрузки
 let LM = {};   // живые матчи: { "t1-ska-cska": {status:"live"|"final", hs, as, ot} }
 const TWITCH_URL = "https://www.twitch.tv/khltvlive";
@@ -518,7 +532,7 @@ async function initBackend() {
     Backend.auth = firebase.auth(); Backend.db = firebase.firestore(); Backend.ready = true;
     try { Backend.storage = firebase.storage(); } catch (_) { Backend.storage = null; }
     Backend.db.collection("lineups").onSnapshot(snap => {
-      LU = {}; snap.forEach(d => { LU[d.id] = d.data(); });
+      LU = {}; snap.forEach(d => { LU[d.id] = d.data(); }); LU = withPresets(LU);
       renderSchedule(); renderHome();
       refreshModal();
     }, err => console.warn("lineups", err));
@@ -763,6 +777,7 @@ async function clearLineup() {
 }
 
 // ---------- Запуск ----------
+LU = withPresets(LU);
 renderAll();
 Backend.init = initBackend();
 (async () => {
