@@ -268,7 +268,7 @@ const openModal = (html, lock = false) => {
 };
 let modalScroll = 0;
 const closeModal = () => {
-  modalLocked = false; editing = false; currentMatch = null; pendingVideo = null;
+  modalLocked = false; editing = false; currentMatch = null; pendingVideo = null; ytDockClose();
   $("#overlay").classList.remove("on", "locked");
   if (document.body.classList.contains("mo")) { document.body.classList.remove("mo"); window.scrollTo(0, modalScroll); }
 };
@@ -406,6 +406,8 @@ document.addEventListener("click", e => {
   const yp = e.target.closest("[data-ytplay]"); if (yp) ytPlay(yp.dataset.ytplay);
   const gv = e.target.closest("[data-gvt]"); if (gv) goalSetVt(gv.dataset.gvt);
   if (e.target.closest("[data-ytsave]")) ytSave();
+  if (e.target.closest("[data-ytdock]")) ytDockOpen();
+  const yd = e.target.closest("[data-ytd]"); if (yd) ytDockAct(yd.dataset.ytd);
   const vp = e.target.closest("[data-vplay]"); if (vp) playVideo(vp.dataset.vplay);
   if (e.target.closest("[data-vclear]")) { pendingVideo = null; setVid(); }
   const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
@@ -662,10 +664,11 @@ function parseVt(s) {   // "23:41", "1:05:12" или секунды -> числ�
 }
 const fmtVt = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), c = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(c).padStart(2, "0"); };
 function ytAdmin(key, d) {
-  return `<div class="box adm"><h3>Видео игры (YouTube)</h3><p class="hint">Вставьте ссылку на запись матча. Потом у каждого гола нажмите ⏱ и укажите время гола в видео — появится кнопка ▶ с повтором.</p>
+  return `<div class="box adm"><h3>Видео игры (YouTube)</h3><p class="hint">Вставьте ссылку на запись матча и сохраните. Затем откройте плеер: пока смотрите игру, нажимайте «⏱ В поле гола» — время подставится само. У готового гола кнопка ⏱ тоже берёт время из плеера.</p>
     <input class="inp" id="ytUrl" placeholder="https://youtu.be/..." inputmode="url" autocomplete="off" value="${esc((d && d.yt) || "")}">
     <div class="err" id="ytErr"></div>
-    <button class="btn" type="button" data-ytsave="1">💾 Сохранить видео</button></div>`;
+    <button class="btn" type="button" data-ytsave="1">💾 Сохранить видео</button>
+    ${ytId(d && d.yt) ? `<button class="btn ghost" type="button" data-ytdock="1">▶ Открыть плеер: брать время голов</button>` : ""}</div>`;
 }
 async function ytSave() {
   const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key), er = $("#ytErr");
@@ -677,11 +680,55 @@ async function ytSave() {
     er.textContent = url ? "Сохранено ✓" : "Видео убрано";
   } catch (e) { er.textContent = "Не удалось сохранить. Проверьте вход создателя."; }
 }
+
+// ---------- Плеер-помощник: время гола берётся прямо из видео ----------
+let ytp = null, ytTimer = null, ytApi = null;
+function ytLoadApi() {
+  if (ytApi) return ytApi;
+  return ytApi = new Promise(res => {
+    if (window.YT && window.YT.Player) return res();
+    window.onYouTubeIframeAPIReady = res;
+    const s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(s);
+  });
+}
+const ytNow = () => { try { return ytp && ytp.getCurrentTime ? Math.floor(ytp.getCurrentTime()) : null; } catch (e) { return null; } };
+function ytDockClose() {
+  clearInterval(ytTimer); ytTimer = null;
+  try { if (ytp && ytp.destroy) ytp.destroy(); } catch (e) {}
+  ytp = null;
+  const d = $("#ytdock"); if (d) d.remove();
+}
+async function ytDockOpen() {
+  const d = LM[currentMatch], id = ytId(d && d.yt);
+  if (!id) { alert("Сначала сохраните ссылку на видео"); return; }
+  ytDockClose();
+  const dock = document.createElement("div"); dock.id = "ytdock"; dock.className = "ytdock";
+  dock.innerHTML = `<div class="ytdh"><b>Время голов</b><span id="ytdT">0:00</span><button type="button" data-ytd="min" aria-label="Свернуть">▁</button><button type="button" data-ytd="x" aria-label="Закрыть">✕</button></div>
+    <div class="ytdp"><div id="ytdPlayer"></div></div>
+    <div class="ytdb"><button type="button" data-ytd="-10">−10 с</button><button type="button" data-ytd="+10">+10 с</button><button type="button" class="take" data-ytd="take">⏱ В поле гола</button></div>
+    <div class="ytdm" id="ytdMsg"></div>`;
+  document.body.appendChild(dock);
+  await ytLoadApi();
+  ytp = new YT.Player("ytdPlayer", { videoId: id, width: "100%", height: "100%", playerVars: { playsinline: 1, rel: 0, modestbranding: 1 } });
+  ytTimer = setInterval(() => { const t = ytNow(), e = $("#ytdT"); if (e && t !== null) e.textContent = fmtVt(t); }, 500);
+}
+function ytDockAct(act) {
+  const msg = $("#ytdMsg"), t = ytNow();
+  if (act === "x") { ytDockClose(); return; }
+  if (act === "min") { $("#ytdock").classList.toggle("min"); return; }
+  if (t === null) { msg.textContent = "Плеер ещё загружается…"; return; }
+  if (act === "-10" || act === "+10") { ytp.seekTo(Math.max(0, t + (act === "-10" ? -10 : 10)), true); return; }
+  if (act === "take") {
+    const f = $("#gVt");
+    if (!f) { msg.textContent = "Откройте матч и форму «Добавить гол»"; return; }
+    f.value = fmtVt(t); msg.textContent = "Время " + fmtVt(t) + " записано в поле гола ✓";
+  }
+}
 async function goalSetVt(id) {
   const key = currentMatch, d = LM[key]; if (!isAdmin() || !d) return;
   const g = (d.goals || []).find(x => x.id === id); if (!g) return;
-  const cur = typeof g.vt === "number" ? fmtVt(g.vt) : "";
-  const r = prompt("Время гола в видео (например 23:41 или 1:05:12).\nПусто — убрать повтор.", cur); if (r === null) return;
+  const now = ytNow(), cur = now !== null && now > 0 ? fmtVt(now) : typeof g.vt === "number" ? fmtVt(g.vt) : "";
+  const r = prompt("Время гола в видео (например 23:41 или 1:05:12).\n" + (now !== null && now > 0 ? "Подставлено текущее время плеера. " : "") + "Пусто — убрать повтор.", cur); if (r === null) return;
   const vt = r.trim() === "" ? null : parseVt(r);
   if (r.trim() !== "" && vt === null) { alert("Формат времени: 23:41 или 1:05:12"); return; }
   const goals = d.goals.map(x => { if (x.id !== id) return x; const y = { ...x }; if (vt === null) delete y.vt; else y.vt = vt; return y; });

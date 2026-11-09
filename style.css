@@ -391,3 +391,16 @@ button.gplay { border: 0; cursor: pointer; }
 .ytf iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 button.gplay.yt { background: #c4302b; }
 .gvt { color: var(--muted); }
+
+/* плеер-помощник для времени голов */
+.ytdock { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 130; max-width: 420px; margin: 0 auto; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.7); }
+.ytdh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ytdh b { flex: 1; }
+.ytdh span { color: var(--accent); font-weight: 700; }
+.ytdh button, .ytdb button { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); color: var(--text); background: var(--bg); }
+.ytdp { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #000; }
+.ytdp iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.ytdb { display: flex; gap: 8px; margin-top: 8px; }
+.ytdb .take { flex: 1; background: var(--accent); color: #fff; border-color: transparent; font-weight: 700; }
+.ytdm { min-height: 16px; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.ytdock.min .ytdp, .ytdock.min .ytdb { display: none; }
