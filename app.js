@@ -224,19 +224,55 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 
 function clubModal(id) {
   const t = T(id);
-  openModal(`<div style="text-align:center;margin-bottom:12px">${badge(t, true)}<h3 style="margin-top:10px">${t.name}</h3></div>
-    <div class="row"><span>Город</span><span>${t.city}</span></div>
-    <div class="row"><span>Арена</span><span>${t.arena}</span></div>
-    <div class="row"><span>Конференция</span><span>${CONF[t.conf]}</span></div>
-    <div class="row"><span>Дивизион</span><span>${t.div}</span></div>
-    <div class="row"><span>Достижения</span><span>${t.titles.length ? t.titles.join(", ") : "Пока нет"}</span></div>
+  const S = clubSeason(id), info = (k, v) => `<div class="ci"><span>${k}</span><b>${v}</b></div>`;
+  const tile = (k, v) => `<div class="kc"><span>${k}</span><div class="kv">${v}</div></div>`;
+  const diff = S.gf - S.ga, dots = S.form.length ? S.form.map(w => `<i class="fd ${w ? "w" : "l"}"></i>`).join("") : `<span class="muted">—</span>`;
+  openModal(`<div class="clogo">${badge(t, true)}</div>
+    <h3 class="cname">${t.name}</h3>
+    ${info("Город", t.city)}${info("Арена", t.arena)}${info("Достижения", t.titles.length ? t.titles.join(", ") : "Достижений нет")}
+    <h4 class="ph">Сезон · ${CONF[t.conf]}</h4>
+    <div class="kt">
+      ${tile("Место", `${S.place}<small class="${S.place <= 8 ? "po" : ""}">${S.place <= 8 ? "плей-офф" : "вылет"}</small>`)}
+      ${tile("Очки", S.pts)}
+      ${tile("Матчи", S.gp)}
+      ${tile("Победы / пор.", `${S.w} / ${S.l}`)}
+      ${tile("Шайбы", `${S.gf}:${S.ga}<small>${diff > 0 ? "+" + diff : diff}</small>`)}
+      ${tile("Форма", `<div class="form">${dots}</div>`)}
+    </div>
+    <h4 class="ph">Последний матч</h4>${S.last ? clubMatchHtml(S.last) : `<p class="hint">Сыгранных матчей пока нет</p>`}
+    <h4 class="ph">Следующий матч</h4>${S.next ? clubMatchHtml(S.next) : `<p class="hint">Запланированных матчей пока нет</p>`}
     ${clubLeadersHtml(id)}`);
+}
+// Сезон клуба для карточки. Место, очки, игры и победы — из турнирной таблицы (STANDINGS + матчи, завершённые на сайте);
+// шайбы, форма, последний и следующий матч — по матчам с результатом.
+function clubSeason(id) {
+  const t = T(id), rows = standings(t.conf), i = rows.findIndex(r => r.t && r.t.id === id), r = rows[i] || { gp: 0, w: 0, otw: 0, pts: 0 };
+  const ord = m => (m.stage === "regular" ? 0 : 1e4) + (m.tour || 0);
+  const byTime = (a, b) => ord(a) - ord(b) || (a.date || "").localeCompare(b.date || "");
+  const mine = MATCHES.filter(m => m.home === id || m.away === id);
+  const done = mine.filter(m => m.hs !== null && !m.live).sort(byTime);
+  const reg = done.filter(m => m.stage === "regular");
+  let gf = 0, ga = 0;
+  reg.forEach(m => { gf += m.home === id ? m.hs : m.as; ga += m.home === id ? m.as : m.hs; });
+  const w = r.w + r.otw;
+  return {
+    place: i < 0 ? rows.length : i + 1, pts: r.pts, gp: r.gp, w, l: Math.max(0, r.gp - w), gf, ga,
+    form: reg.slice(-5).map(m => (m.home === id ? m.hs > m.as : m.as > m.hs)),
+    last: done[done.length - 1] || null,
+    next: mine.filter(m => m.hs === null || m.live).sort(byTime)[0] || null
+  };
+}
+function clubMatchHtml(m) {
+  const key = matchKey(m), played = m.hs !== null;
+  const lab = m.tour ? `Тур ${m.tour}` : (m.label || "Плей-офф");
+  const ot = played && m.ot ? `<small>${typeof m.ot === "string" ? m.ot : "ОТ"}</small>` : "";
+  return `<div class="cm${key ? " clickable" : ""}"${key ? ` data-mk="${key}"` : ""}><div class="ct">${lab}</div><div class="cr">${tmHtml(T(m.home))}<div class="cs${played ? "" : " vs"}">${played ? m.hs + ":" + m.as : "vs"}${ot}</div>${tmHtml(T(m.away), true)}</div></div>`;
 }
 // Блок «Лидеры клуба» — одинаковый в карточке каждого клуба (карточка открывается из любой вкладки)
 function clubLeadersHtml(id) {
   const L = clubLeaders(id);
   const who = (r, val) => r ? `${esc(r.name)}${r.n !== null ? ` <small class="muted">№${r.n}</small>` : ""} <b>${val}</b>` : "—";
-  return `<h4 class="ph" style="margin-top:14px">Лидеры клуба</h4>
+  return `<h4 class="ph">Лидеры клуба</h4>
     <div class="row"><span>Больше всех очков (Г+П)</span><span class="ldr">${who(L.pts, L.pts && L.pts.pts)}</span></div>
     <div class="row"><span>Лучший бомбардир (голы)</span><span class="ldr">${who(L.goals, L.goals && L.goals.g)}</span></div>
     <div class="row"><span>Лучший вратарь (пропущено)</span><span class="ldr">${who(L.gk, L.gk && L.gk.ga)}</span></div>`;

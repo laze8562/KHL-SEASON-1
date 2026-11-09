@@ -327,3 +327,31 @@ button.gplay { border: 0; cursor: pointer; }
 
 .ldr { text-align: right; }
 .tm.clickable { cursor: pointer; }
+
+/* ---- Карточка клуба ---- */
+.clogo { display: inline-flex; padding: 12px; background: #0a0e15; border: 1px solid var(--line); border-radius: 24px; margin-bottom: 16px; }
+.clogo .badge { width: 104px; height: 104px; font-size: 26px; }
+.modal .cname { font-family: "Oswald", "Arial Narrow", Impact, sans-serif; font-size: 34px; font-weight: 700; line-height: 1.1; margin: 0 0 16px; }
+.ci { margin-bottom: 12px; }
+.ci span { display: block; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+.ci b { font-weight: 500; font-size: 19px; }
+.kt { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kc { background: #0a0e15; border: 1px solid var(--line); border-radius: 14px; padding: 12px 10px; min-width: 0; }
+.kc > span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; min-height: 2.4em; line-height: 1.2; }
+.kv { font-family: "Oswald", "Arial Narrow", Impact, sans-serif; font-size: 30px; font-weight: 700; line-height: 1.1; margin-top: 4px; white-space: nowrap; }
+.kv small { font-family: system-ui, sans-serif; font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 5px; }
+.kv small.po { color: #2ecc71; }
+.form { display: flex; gap: 5px; flex-wrap: nowrap; padding-top: 10px; }
+.fd { width: 12px; height: 12px; flex: none; border-radius: 50%; display: inline-block; }
+.fd.w { background: #2ecc71; }
+.fd.l { background: #ff5a7a; }
+.cm { background: #0a0e15; border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.ct { text-align: center; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+.cr { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; margin-top: 8px; }
+.cr .badge { width: 34px; height: 34px; }
+.cr .tm { gap: 8px; }
+.cr .tm span { overflow-wrap: anywhere; line-height: 1.15; font-size: 15px; }
+.cr .tm.r { justify-content: flex-end; text-align: right; }
+.cs { text-align: center; font-family: "Oswald", "Arial Narrow", Impact, sans-serif; font-size: 26px; font-weight: 700; min-width: 54px; }
+.cs small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.cs.vs { font-size: 16px; font-weight: 500; color: var(--muted); }
