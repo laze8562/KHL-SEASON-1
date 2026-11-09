@@ -403,6 +403,9 @@ document.addEventListener("click", e => {
   const ms = e.target.closest("[data-ms]"); if (ms) matchAction(ms.dataset.ms);
   const ga = e.target.closest("[data-gadd]"); if (ga) goalAdd();
   const gd = e.target.closest("[data-gdel]"); if (gd) goalDel(gd.dataset.gdel);
+  const yp = e.target.closest("[data-ytplay]"); if (yp) ytPlay(yp.dataset.ytplay);
+  const gv = e.target.closest("[data-gvt]"); if (gv) goalSetVt(gv.dataset.gvt);
+  if (e.target.closest("[data-ytsave]")) ytSave();
   const vp = e.target.closest("[data-vplay]"); if (vp) playVideo(vp.dataset.vplay);
   if (e.target.closest("[data-vclear]")) { pendingVideo = null; setVid(); }
   const pk = e.target.closest("[data-pick]"); if (pk) edPicker(pk.dataset.pick);
@@ -508,8 +511,11 @@ function goalsHtml(d, admin) {
     const sc = g.team === "away" ? `<span class="dim">${h}</span>:<b>${a}</b>` : `<b>${h}</b>:<span class="dim">${a}</span>`;
     const okv = g.v && /^https?:\/\//i.test(g.v);
     const play = !okv ? "" : g.vf ? `<button type="button" class="gplay" data-vplay="${esc(g.v)}" aria-label="Смотреть момент">▶</button>` : `<a class="gplay" href="${esc(g.v)}" target="_blank" rel="noopener" aria-label="Смотреть момент">▶</a>`;
+    const yid = ytId(d && d.yt), hasVt = typeof g.vt === "number";
+    const ytb = !okv && yid && hasVt ? `<button type="button" class="gplay yt" data-ytplay="${esc(g.id)}" aria-label="Смотреть повтор">▶</button>` : "";
+    const tm = admin && yid ? `<button type="button" class="gdel gvt" data-gvt="${esc(g.id)}" aria-label="Время в видео" title="Время гола в видео">⏱</button>` : "";
     const del = admin ? `<button type="button" class="gdel" data-gdel="${esc(g.id)}" aria-label="Удалить гол">✕</button>` : "";
-    return `<div class="gr"><div class="gt">${esc(g.t || "")}<small>${esc(g.st || (g.per === "ОТ" || g.per === "Б" ? g.per : ""))}</small></div><div class="gs">${sc}</div><div class="gw"><b>${esc(g.p)}</b>${g.a ? `<span>${esc(g.a)}</span>` : ""}</div>${play}${del}</div>`;
+    return `<div class="gr"><div class="gt">${esc(g.t || "")}<small>${esc(g.st || (g.per === "ОТ" || g.per === "Б" ? g.per : ""))}</small></div><div class="gs">${sc}</div><div class="gw"><b>${esc(g.p)}</b>${g.a ? `<span>${esc(g.a)}</span>` : ""}</div>${play}${ytb}${tm}${del}</div>`;
   }).join("");
   return `<div class="lgh"><span>Заброшенные шайбы</span></div><div class="grs">${rows}</div>`;
 }
@@ -529,6 +535,7 @@ function goalsAdmin(m, d) {
     <p class="glab">Вторая передача (необязательно)</p>
     <input class="inp gps" id="gA2" data-gps="A2" placeholder="🔍 Поиск игрока: номер или фамилия" autocomplete="off">
     <div class="gfound" id="gfA2"></div>
+    <input class="inp" id="gVt" placeholder="Время гола в видео YouTube, например 23:41 (необязательно)" inputmode="numeric" autocomplete="off">
     <div id="gVid">${vidPick()}</div>
     <input class="inp" id="gV" placeholder="Или ссылка на видео (необязательно)" inputmode="url" autocomplete="off">
     <div class="err" id="gErr"></div>
@@ -612,8 +619,10 @@ async function goalAdd() {
   if (as1 && as2 && gSame(as1, as2)) { er.textContent = "Один и тот же игрок указан в передачах дважды"; return; }
   if (as2 && !as1) { er.textContent = "Заполните первую передачу"; return; }
   if (v && !/^https?:\/\//i.test(v)) { er.textContent = "Ссылка на видео должна начинаться с https://"; return; }
+  const vtRaw = $("#gVt") ? $("#gVt").value.trim() : "", vt = vtRaw ? parseVt(vtRaw) : null;
+  if (vtRaw && vt === null) { er.textContent = "Время в видео укажите как 23:41 или 1:05:12"; return; }
   // p и a — готовый текст для списка голов в матче; sc и as — структурные данные для статистики
-  const g = { id: String(Date.now()), team: $("#gTeam").value, per: $("#gPer").value, t: $("#gTime").value.trim(), st: $("#gStr").value, p: gLabel(sc), a: assists.map(gLabel).join(", "), sc: gClean(sc), as: assists.map(gClean), v };
+  const g = { id: String(Date.now()), team: $("#gTeam").value, per: $("#gPer").value, t: $("#gTime").value.trim(), st: $("#gStr").value, p: gLabel(sc), a: assists.map(gLabel).join(", "), sc: gClean(sc), as: assists.map(gClean), v, ...(vt !== null ? { vt } : {}) };
   const file = pendingVideo;
   if (file) {
     if (!Backend.storage) { er.textContent = "Хранилище видео не подключено. Включите Storage в Firebase (см. инструкцию) или вставьте ссылку."; return; }
@@ -639,6 +648,57 @@ async function goalAdd() {
     gReset(); setVid(); refreshModal();   // форма очищается, список голов и статистика обновляются
   }
   catch (e) { const er2 = $("#gErr"); if (er2) er2.textContent = "Не удалось сохранить. Проверьте правила Firestore."; }
+}
+// ---------- Видео игры на YouTube: повтор каждого гола ----------
+const YT_BEFORE = 10, YT_AFTER = 15;   // секунд до гола и после него
+function ytId(url) {
+  const m = String(url || "").trim().match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|live\/|embed\/|shorts\/|v\/))([\w-]{11})/i);
+  return m ? m[1] : null;
+}
+function parseVt(s) {   // "23:41", "1:05:12" или секунды -> число секунд
+  const p = String(s).trim().split(":").map(x => x.trim());
+  if (!p.length || p.length > 3 || p.some(x => !/^\d+$/.test(x))) return null;
+  return p.reduce((t, x) => t * 60 + +x, 0);
+}
+const fmtVt = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), c = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(c).padStart(2, "0"); };
+function ytAdmin(key, d) {
+  return `<div class="box adm"><h3>Видео игры (YouTube)</h3><p class="hint">Вставьте ссылку на запись матча. Потом у каждого гола нажмите ⏱ и укажите время гола в видео — появится кнопка ▶ с повтором.</p>
+    <input class="inp" id="ytUrl" placeholder="https://youtu.be/..." inputmode="url" autocomplete="off" value="${esc((d && d.yt) || "")}">
+    <div class="err" id="ytErr"></div>
+    <button class="btn" type="button" data-ytsave="1">💾 Сохранить видео</button></div>`;
+}
+async function ytSave() {
+  const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key), er = $("#ytErr");
+  if (!isAdmin() || !Backend.db || !m) return;
+  const url = $("#ytUrl").value.trim();
+  if (url && !ytId(url)) { er.textContent = "Не похоже на ссылку YouTube"; return; }
+  try {
+    await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, yt: url }, { merge: true });
+    er.textContent = url ? "Сохранено ✓" : "Видео убрано";
+  } catch (e) { er.textContent = "Не удалось сохранить. Проверьте вход создателя."; }
+}
+async function goalSetVt(id) {
+  const key = currentMatch, d = LM[key]; if (!isAdmin() || !d) return;
+  const g = (d.goals || []).find(x => x.id === id); if (!g) return;
+  const cur = typeof g.vt === "number" ? fmtVt(g.vt) : "";
+  const r = prompt("Время гола в видео (например 23:41 или 1:05:12).\nПусто — убрать повтор.", cur); if (r === null) return;
+  const vt = r.trim() === "" ? null : parseVt(r);
+  if (r.trim() !== "" && vt === null) { alert("Формат времени: 23:41 или 1:05:12"); return; }
+  const goals = d.goals.map(x => { if (x.id !== id) return x; const y = { ...x }; if (vt === null) delete y.vt; else y.vt = vt; return y; });
+  try { await Backend.db.collection("matches").doc(key).update({ goals }); }
+  catch (e) { alert("Не удалось сохранить время."); }
+}
+function ytPlay(id) {
+  const key = currentMatch, d = LM[key], yid = ytId(d && d.yt); if (!d || !yid) return;
+  const list = goalsSorted(d.goals || []); let h = 0, a = 0, g = null;
+  for (const x of list) { if (x.team === "away") a++; else h++; if (x.id === id) { g = x; break; } }
+  if (!g || typeof g.vt !== "number") return;
+  const start = Math.max(0, g.vt - YT_BEFORE), end = g.vt + YT_AFTER;
+  const src = `https://www.youtube-nocookie.com/embed/${yid}?start=${start}&end=${end}&autoplay=1&rel=0&playsinline=1&modestbranding=1`;
+  const o = document.createElement("div"); o.className = "vlay";
+  o.innerHTML = `<button type="button" class="vx" aria-label="Закрыть">✕</button><div class="ytw"><div class="ytcap"><b>${esc(g.p)}</b>${g.a ? `<span>${esc(g.a)}</span>` : ""}<small>${esc(g.t || "")} · счёт ${h}:${a}</small></div><div class="ytf"><iframe src="${esc(src)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div></div>`;
+  o.addEventListener("click", e => { if (e.target === o || e.target.classList.contains("vx")) o.remove(); });
+  document.body.appendChild(o);
 }
 async function goalDel(id) {
   const key = currentMatch; if (!isAdmin() || !key || !LM[key] || !confirm("Удалить этот гол?")) return;
@@ -670,11 +730,11 @@ function gClearPlayers() {
 }
 function gReset() {
   gClearPlayers();
-  ["gTime", "gV"].forEach(id => { const i = $("#" + id); if (i) i.value = ""; });
+  ["gTime", "gV", "gVt"].forEach(id => { const i = $("#" + id); if (i) i.value = ""; });
 }
 // в форме гола что-то введено — не перерисовываем окно, чтобы не стереть ввод
 function gDirty() {
-  return gKeys.some(k => { const i = $("#g" + k); return i && i.value; }) || !!($("#gTime") && $("#gTime").value) || !!($("#gV") && $("#gV").value) || !!pendingVideo;
+  return gKeys.some(k => { const i = $("#g" + k); return i && i.value; }) || !!($("#gTime") && $("#gTime").value) || !!($("#gV") && $("#gV").value) || !!($("#gVt") && $("#gVt").value) || !!pendingVideo;
 }
 function gFind(which) {
   const inp = $("#g" + which), box = $("#gf" + which); if (!inp || !box) return;
@@ -961,7 +1021,7 @@ function matchModal(key) {
   const d = LM[key], started = isStarted(d);
   const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small>${started ? periodsHtml(d, isAdmin() && d.status === "live") : ""}</div>`;
   const goals = goalsHtml(d, isAdmin());
-  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
+  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 
