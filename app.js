@@ -76,7 +76,7 @@ const serHtml = s => `<div class="ser">
 function leadersBlock(conf) {
   const rows = standings(conf).slice(0, 3);
   return `<div class="box clickable" data-go="table"><h3>${CONF[conf]}</h3>` +
-    rows.map((r, i) => `<div class="tm" style="margin:8px 0">${i + 1}. ${badge(r.t)}<span style="flex:1">${r.t.name}</span><b>${r.pts}</b></div>`).join("") + `</div>`;
+    rows.map((r, i) => `<div class="tm clickable" data-club="${r.t.id}" style="margin:8px 0">${i + 1}. ${badge(r.t)}<span style="flex:1">${r.t.name}</span><b>${r.pts}</b></div>`).join("") + `</div>`;
 }
 function newsCard(n) {
   const click = n.list ? ` clickable" data-list="${n.list}` : "";
@@ -175,7 +175,7 @@ function standingsTable(conf) {
   const rows = standings(conf);
   return `<div class="box"><h3>${CONF[conf]}</h3><div class="tw"><table>
     <tr><th>Место</th><th class="l">Клуб</th><th>Игры</th><th>В</th><th>ВО</th><th>Очки</th></tr>
-    ${rows.map((r, i) => `<tr class="${i < 8 ? "po" : ""}"><td>${i + 1}</td><td class="l"><div class="tm">${badge(r.t)}<span>${r.t.name}</span></div></td><td>${r.gp}</td><td>${r.w}</td><td>${r.otw}</td><td><b>${r.pts}</b></td></tr>`).join("")}
+    ${rows.map((r, i) => `<tr class="${i < 8 ? "po" : ""}"><td>${i + 1}</td><td class="l"><div class="tm clickable" data-club="${r.t.id}">${badge(r.t)}<span>${r.t.name}</span></div></td><td>${r.gp}</td><td>${r.w}</td><td>${r.otw}</td><td><b>${r.pts}</b></td></tr>`).join("")}
   </table></div><p class="hint" style="margin-top:8px">Первые 8 мест — выход в плей-офф</p></div>`;
 }
 function renderTable() {
@@ -229,7 +229,17 @@ function clubModal(id) {
     <div class="row"><span>Арена</span><span>${t.arena}</span></div>
     <div class="row"><span>Конференция</span><span>${CONF[t.conf]}</span></div>
     <div class="row"><span>Дивизион</span><span>${t.div}</span></div>
-    <div class="row"><span>Достижения</span><span>${t.titles.length ? t.titles.join(", ") : "Пока нет"}</span></div>`);
+    <div class="row"><span>Достижения</span><span>${t.titles.length ? t.titles.join(", ") : "Пока нет"}</span></div>
+    ${clubLeadersHtml(id)}`);
+}
+// Блок «Лидеры клуба» — одинаковый в карточке каждого клуба (карточка открывается из любой вкладки)
+function clubLeadersHtml(id) {
+  const L = clubLeaders(id);
+  const who = (r, val) => r ? `${esc(r.name)}${r.n !== null ? ` <small class="muted">№${r.n}</small>` : ""} <b>${val}</b>` : "—";
+  return `<h4 class="ph" style="margin-top:14px">Лидеры клуба</h4>
+    <div class="row"><span>Больше всех очков (Г+П)</span><span class="ldr">${who(L.pts, L.pts && L.pts.pts)}</span></div>
+    <div class="row"><span>Лучший бомбардир (голы)</span><span class="ldr">${who(L.goals, L.goals && L.goals.g)}</span></div>
+    <div class="row"><span>Лучший вратарь (пропущено)</span><span class="ldr">${who(L.gk, L.gk && L.gk.ga)}</span></div>`;
 }
 function pickerModal() {
   openModal(`<h3>Выберите любимый клуб</h3><p class="hint">Акцентный цвет сайта изменится под ваш клуб</p>
@@ -281,7 +291,7 @@ $("#close").onclick = closeModal;
 $("#overlay").addEventListener("click", e => { if (e.target.id === "overlay" && !modalLocked) closeModal(); });
 
 document.addEventListener("click", e => {
-  const g = e.target.closest("[data-go]"); if (g) go(g.dataset.go);
+  const g = e.target.closest("[data-go]"); if (g && !e.target.closest("[data-club]")) go(g.dataset.go);
   const c = e.target.closest("[data-club]"); if (c) clubModal(c.dataset.club);
   const ls = e.target.closest("[data-list]"); if (ls) listModal(ls.dataset.list);
   const f = e.target.closest("[data-fav]");
@@ -641,6 +651,25 @@ function statsData() {
   });
   return [...rows.values()].map(r => ({ ...r, pts: r.g + r.a }));
 }
+// Лидеры одного клуба: по очкам, по голам и лучший вратарь (меньше всего пропущенных шайб).
+// В воротах в матче считается вратарь с ролью «Основной» из состава (если роли нет — первый вратарь списка);
+// пропущено = голы соперника в этом матче по итоговому счёту. Считаются только завершённые матчи регулярного чемпионата.
+function clubLeaders(id) {
+  const mine = statsData().filter(r => r.team === id);
+  const top = (k, then) => mine.filter(r => r[k] > 0).sort((a, b) => b[k] - a[k] || b[then] - a[then] || a.name.localeCompare(b.name, "ru"))[0] || null;
+  const gks = new Map();
+  MATCHES.forEach(m => {
+    const key = matchKey(m);
+    if (!key || m.hs === null || m.live || (m.home !== id && m.away !== id)) return;
+    const d = LU[`${key}__${id}`]; if (!d) return;
+    const gs = (d.players || []).filter(p => p.pos === "G");
+    const g = gs.find(p => +p.line === 1) || gs[0]; if (!g) return;
+    let r = gks.get(g.name); if (!r) gks.set(g.name, r = { n: gNum(g), name: g.name, ga: 0, gp: 0 });
+    r.ga += m.home === id ? m.as : m.hs; r.gp++;
+  });
+  const gk = [...gks.values()].sort((a, b) => a.ga - b.ga || b.gp - a.gp || a.name.localeCompare(b.name, "ru"))[0] || null;
+  return { pts: top("pts", "g"), goals: top("g", "pts"), gk };
+}
 const STAT_TABLES = [
   { id: "pts", title: "Лидеры по очкам", hint: "Очки = голы + передачи", col: "pts", then: "g" },
   { id: "g", title: "Лидеры по голам", hint: "Количество заброшенных шайб", col: "g", then: "pts" },
@@ -655,7 +684,7 @@ function statsTable(def, all) {
   const body = shown.map((r, i) => {
     if (r[def.col] !== prev) { place = i + 1; prev = r[def.col]; }   // у равных результатов одно и то же место
     const t = T(r.team);
-    return `<tr><td>${place}</td><td class="l"><div class="tm">${badge(t)}<span class="pl"><b>${esc(r.name)}</b><small>${r.n !== null ? "№" + r.n + " · " : ""}${esc(t ? t.name : r.team)}</small></span></div></td>${td(r, "g")}${td(r, "a")}${td(r, "pts")}</tr>`;
+    return `<tr><td>${place}</td><td class="l"><div class="tm clickable" data-club="${r.team}">${badge(t)}<span class="pl"><b>${esc(r.name)}</b><small>${r.n !== null ? "№" + r.n + " · " : ""}${esc(t ? t.name : r.team)}</small></span></div></td>${td(r, "g")}${td(r, "a")}${td(r, "pts")}</tr>`;
   }).join("");
   const more = rows.length > 20 ? `<button class="btn ghost stbtn" type="button" data-stall="${def.id}">${open ? "Свернуть" : "Показать всех (" + rows.length + ")"}</button>` : "";
   return `<div class="box"><h3>${def.title}</h3><p class="hint">${def.hint}</p>` + (rows.length

@@ -324,3 +324,6 @@ button.gplay { border: 0; cursor: pointer; }
 .gfound { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; max-height: 220px; overflow-y: auto; }
 .gfound:empty { display: none; }
 .gfound .foundbtn { margin: 0; }
+
+.ldr { text-align: right; }
+.tm.clickable { cursor: pointer; }
