@@ -4,7 +4,7 @@ const CONF = { west: "Запад", east: "Восток" };
 const BASE_ACCENT = "#2f7bff";
 
 let state = JSON.parse(localStorage.getItem("khl-s1") || "{}"); // { fav: id|null, color: bool }
-const ui = { schStage: "regular", tour: null, tabStage: "regular" };
+const ui = { schStage: "regular", tour: null, tabStage: "regular", bigTour: null };
 const save = () => localStorage.setItem("khl-s1", JSON.stringify(state));
 
 const badge = (t, big) => t
@@ -108,6 +108,58 @@ function renderHome() {
     el.innerHTML = m ? matchHtml(m) : `<span class="hint">У клуба «${fav.name}» пока нет запланированных матчей</span>`;
   }
   $("#homeNews").innerHTML = sortedNews().slice(0, 4).map(newsCard).join("");
+  renderTicker(); renderBig();
+}
+
+// ---------- Бегущая строка (хранится в базе: matches/_ticker, меняет только создатель) ----------
+function renderTicker() {
+  const d = LM._ticker || {}, text = String(d.text || "").trim(), adm = isAdmin();
+  const box = $("#ticker");
+  box.style.display = text || adm ? "" : "none";
+  $("#tkLabel").textContent = d.label || "ВАЖНО";
+  $("#tkEdit").style.display = adm ? "" : "none";
+  const t = text || "Нажмите ✎, чтобы добавить сообщение";
+  if ($("#tkTrack").dataset.t !== t) {
+    $("#tkTrack").dataset.t = t;
+    $("#tkTrack").innerHTML = `<span>${esc(t)}</span><span>${esc(t)}</span><span>${esc(t)}</span><span>${esc(t)}</span>`;
+    $("#tkTrack").style.setProperty("--tk", Math.max(12, t.length * 0.28 * 2) + "s");
+  }
+}
+function tickerModal() {
+  const d = LM._ticker || {};
+  openModal(`<div class="tkForm"><h3>Бегущая строка</h3><p class="hint">Показывается вверху главной. Пустой текст — строка скрыта.</p>
+    <label>Метка слева</label><input type="text" id="tkLab" maxlength="20" value="${esc(d.label || "ВАЖНО")}">
+    <label>Текст</label><textarea id="tkTxt" maxlength="300">${esc(d.text || "")}</textarea>
+    <button class="btn" id="tkSave">Сохранить</button><button class="btn ghost" id="tkClear">Убрать строку</button>
+    <div class="hint" id="tkMsg"></div></div>`);
+}
+async function tickerSave(clear) {
+  if (!isAdmin() || !Backend.db) return;
+  const msg = $("#tkMsg");
+  const text = clear ? "" : $("#tkTxt").value.trim(), label = ($("#tkLab").value.trim() || "ВАЖНО").slice(0, 20);
+  try {
+    await Backend.db.collection("matches").doc("_ticker").set({ text, label, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    closeModal();
+  } catch (e) { if (msg) msg.textContent = "Не удалось сохранить. Проверьте вход создателя и интернет."; }
+}
+
+// ---------- Самый результативный матч тура ----------
+function renderBig() {
+  const n = tourCount(), sel = $("#bigSel");
+  if (!n) { $("#bigMatch").innerHTML = ""; return; }
+  const played = m => m.hs !== null && !m.live;
+  if (ui.bigTour == null) {
+    const done = regular().filter(played).map(m => m.tour);
+    ui.bigTour = done.length ? Math.max(...done) : 1;
+  }
+  ui.bigTour = Math.min(Math.max(1, ui.bigTour), n);
+  sel.innerHTML = Array.from({ length: n }, (_, i) => `<option value="${i + 1}"${i + 1 === ui.bigTour ? " selected" : ""}>Тур ${i + 1}</option>`).join("");
+  const list = regular().filter(m => m.tour === ui.bigTour && played(m));
+  if (!list.length) { $("#bigMatch").innerHTML = `<p class="hint">В этом туре ещё нет сыгранных матчей</p>`; return; }
+  const tot = m => (m.hs || 0) + (m.as || 0), diff = m => Math.abs((m.hs || 0) - (m.as || 0));
+  const best = list.reduce((b, m) => (tot(m) > tot(b) || (tot(m) === tot(b) && diff(m) > diff(b))) ? m : b);
+  const top = list.filter(m => tot(m) === tot(best) && diff(m) === diff(best));
+  $("#bigMatch").innerHTML = top.map(m => `<p class="bigNote">🔥 Всего шайб: <b>${tot(m)}</b></p>${matchHtml(m)}`).join("");
 }
 
 const matchKey = m => m.tour ? `t${m.tour}-${m.home}-${m.away}` : null;
@@ -320,7 +372,14 @@ $("#tourPrev").onclick = () => { ui.tour--; renderSchedule(); };
 $("#tourNext").onclick = () => { ui.tour++; renderSchedule(); };
 tabs("#tabStage", "tabStage", renderTable);
 
-$("#nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) go(b.dataset.view); });
+const navClose = () => { $("#nav").classList.remove("open"); $("#burger").setAttribute("aria-expanded", "false"); };
+$("#nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { go(b.dataset.view); navClose(); } });
+$("#burger").onclick = e => { e.stopPropagation(); const o = $("#nav").classList.toggle("open"); $("#burger").setAttribute("aria-expanded", o ? "true" : "false"); };
+document.addEventListener("click", e => { if (!e.target.closest("#nav") && !e.target.closest("#burger")) navClose(); });
+$("#tkEdit").onclick = tickerModal;
+$("#bigSel").addEventListener("change", e => { ui.bigTour = +e.target.value; renderBig(); });
+$("#bigPrev").onclick = () => { ui.bigTour--; renderBig(); };
+$("#bigNext").onclick = () => { ui.bigTour++; renderBig(); };
 $("#brand").onclick = () => go("home");
 $("#gear").onclick = settingsModal;
 $("#close").onclick = closeModal;
@@ -351,6 +410,8 @@ document.addEventListener("click", e => {
   if (fd) { const [pos, i] = fd.dataset.found.split(":"); const r = ed.rows[pos][+i]; r.on = true; edPicker(pos, String(r.n || r.name)); return; }
   if (e.target.id === "pAdd") { const pos = $("#pRows").dataset.pos; edCollect(pos); ed.rows[pos].push({ pos, n: "", name: "", on: true, line: "" }); edPicker(pos); }
   if (e.target.id === "pDone") { edCollect($("#pRows").dataset.pos); edMain(); }
+  if (e.target.id === "tkSave") tickerSave(false);
+  if (e.target.id === "tkClear") tickerSave(true);
   if (e.target.id === "eSave") saveLineup();
   if (e.target.id === "eCancel") matchModal(currentMatch);
   if (e.target.id === "eClear") clearLineup();
@@ -788,6 +849,7 @@ function applyRole() {
   if (id && state.fav !== id) { state.fav = id; save(); applyAccent(); renderHome(); }
   // вкладка «Доступы» видна только создателю
   const nb = $("#navAccess"); if (nb) nb.style.display = adm ? "" : "none";
+  renderTicker();
   if (!adm && $("#access").classList.contains("on")) go("home");
 }
 
