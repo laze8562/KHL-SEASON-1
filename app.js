@@ -275,7 +275,7 @@ function clubLeadersHtml(id) {
   return `<h4 class="ph">Лидеры клуба</h4>
     <div class="row"><span>Больше всех очков (Г+П)</span><span class="ldr">${who(L.pts, L.pts && L.pts.pts)}</span></div>
     <div class="row"><span>Лучший бомбардир (голы)</span><span class="ldr">${who(L.goals, L.goals && L.goals.g)}</span></div>
-    <div class="row"><span>Лучший вратарь (пропущено)</span><span class="ldr">${who(L.gk, L.gk && L.gk.ga)}</span></div>`;
+    <div class="row"><span>Лучший вратарь<small class="sub">меньше всего пропущено</small></span><span class="ldr">${L.gk ? `${esc(L.gk.name)}${L.gk.n !== null ? ` <small class="muted">№${L.gk.n}</small>` : ""}<small class="sub">пропустил <b>${L.gk.ga}</b></small>` : "—"}</span></div>`;
 }
 function pickerModal() {
   openModal(`<h3>Выберите любимый клуб</h3><p class="hint">Акцентный цвет сайта изменится под ваш клуб</p>

@@ -355,3 +355,6 @@ button.gplay { border: 0; cursor: pointer; }
 .cs { text-align: center; font-family: "Oswald", "Arial Narrow", Impact, sans-serif; font-size: 26px; font-weight: 700; min-width: 54px; }
 .cs small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 .cs.vs { font-size: 16px; font-weight: 500; color: var(--muted); }
+.modal .row small.sub { display: block; font-size: 12px; color: var(--muted); }
+.modal .row .ldr small.sub { color: var(--text); font-size: 13px; }
+.ldr small.sub b { color: var(--accent); font-size: 15px; }
