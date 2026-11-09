@@ -306,3 +306,21 @@ button.gplay { border: 0; cursor: pointer; }
 #eFound { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .foundbtn { text-align: left; display: flex; gap: 8px; align-items: baseline; }
 .foundbtn small { color: var(--muted); margin-left: auto; }
+
+/* ---- Статистика игроков ---- */
+.stats { display: flex; flex-direction: column; gap: 14px; }
+.stats .box h3 { margin-bottom: 2px; }
+.stats .box .hint { margin: 0 0 8px; }
+.stats td, .stats th { padding: 8px 4px; }
+.stats th.pri, .stats td.pri { color: var(--accent); }
+.stats td.pri b { font-size: 16px; }
+.pl { display: flex; flex-direction: column; min-width: 0; text-align: left; line-height: 1.25; }
+.pl b { overflow-wrap: anywhere; }
+.pl small { color: var(--muted); font-size: 11px; }
+.stbtn { display: block; width: 100%; margin: 10px 0 0; }
+
+/* ---- Поиск игрока при вводе гола ---- */
+.glab { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+.gfound { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; max-height: 220px; overflow-y: auto; }
+.gfound:empty { display: none; }
+.gfound .foundbtn { margin: 0; }

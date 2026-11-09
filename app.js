@@ -251,7 +251,7 @@ function applyAccent() {
   const fav = state.fav && T(state.fav);
   document.documentElement.style.setProperty("--accent", fav && state.color !== false ? fav.color : BASE_ACCENT);
 }
-function renderAll() { applyAccent(); renderHome(); renderSchedule(); renderTable(); renderClubs(); renderMedia(); }
+function renderAll() { applyAccent(); renderHome(); renderSchedule(); renderTable(); renderStats(); renderClubs(); renderMedia(); }
 
 function go(view) {
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === view));
@@ -369,6 +369,7 @@ function applyLive() {
 function refreshModal() {
   const ae = document.activeElement;
   if (ae && ae.closest && ae.closest("#modalBody") && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;   // не сбивать ввод
+  if (currentMatch && $("#gP") && gDirty()) return;   // в форме гола уже что-то введено
   if (currentMatch && !editing && $("#overlay").classList.contains("on")) { const y = window.scrollY; matchModal(currentMatch); window.scrollTo(0, y); }
 }
 // ---------- Периоды, голы и управление матчем ----------
@@ -407,13 +408,20 @@ function goalsHtml(d, admin) {
 }
 function goalsAdmin(m, d) {
   const H = T(m.home), A = T(m.away), cp = (d && d.period) || "1";
-  return `<div class="box adm"><h3>Добавить гол</h3><p class="hint">Можно после эфира: время, кто забил, передачи и ссылка на видео.</p>
+  return `<div class="box adm"><h3>Добавить гол</h3><p class="hint">Выберите команду, затем найдите игроков по номеру или фамилии — номер подставится сам. Голы и передачи сразу попадут во вкладку «Статистика».</p>
     <select class="inp" id="gTeam"><option value="home">${esc(H.name)}</option><option value="away">${esc(A.name)}</option></select>
     <select class="inp" id="gPer">${PER.map(p => `<option${p === cp ? " selected" : ""}>${p}</option>`).join("")}</select>
     <input class="inp" id="gTime" placeholder="Время гола, например 34:14" autocomplete="off">
     <select class="inp" id="gStr"><option value="РАВ">РАВ — равные составы</option><option value="БОЛ">БОЛ — большинство</option><option value="МЕН">МЕН — меньшинство</option><option value="">Не указывать</option></select>
-    <input class="inp" id="gP" placeholder="Кто забил: 77. Зуган Д." autocomplete="off">
-    <input class="inp" id="gAs" placeholder="Передачи: 37. Сукезе Н., 27. Менелл Б." autocomplete="off">
+    <p class="glab">Кто забил</p>
+    <input class="inp gps" id="gP" data-gps="P" placeholder="🔍 Поиск игрока: номер или фамилия" autocomplete="off">
+    <div class="gfound" id="gfP"></div>
+    <p class="glab">Первая передача (необязательно)</p>
+    <input class="inp gps" id="gA1" data-gps="A1" placeholder="🔍 Поиск игрока: номер или фамилия" autocomplete="off">
+    <div class="gfound" id="gfA1"></div>
+    <p class="glab">Вторая передача (необязательно)</p>
+    <input class="inp gps" id="gA2" data-gps="A2" placeholder="🔍 Поиск игрока: номер или фамилия" autocomplete="off">
+    <div class="gfound" id="gfA2"></div>
     <div id="gVid">${vidPick()}</div>
     <input class="inp" id="gV" placeholder="Или ссылка на видео (необязательно)" inputmode="url" autocomplete="off">
     <div class="err" id="gErr"></div>
@@ -488,10 +496,17 @@ function playVideo(url) {
 async function goalAdd() {
   if (!isAdmin() || !Backend.db || !currentMatch || upPct !== null) return;
   const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key), er = $("#gErr"); if (!m) return;
-  const p = $("#gP").value.trim(), v = $("#gV").value.trim();
-  if (!p) { er.textContent = "Укажите, кто забил"; return; }
+  const v = $("#gV").value.trim(), teamId = goalTeamId();
+  const sc = gResolve("P", teamId), as1 = gResolve("A1", teamId), as2 = gResolve("A2", teamId);
+  if (sc === false || as1 === false || as2 === false) { er.textContent = "По запросу найдено несколько игроков. Выберите нужного из списка."; return; }
+  if (!sc) { er.textContent = "Укажите, кто забил"; return; }
+  const assists = [as1, as2].filter(Boolean);
+  if (assists.some(x => gSame(x, sc))) { er.textContent = "Автор гола не может быть и ассистентом"; return; }
+  if (as1 && as2 && gSame(as1, as2)) { er.textContent = "Один и тот же игрок указан в передачах дважды"; return; }
+  if (as2 && !as1) { er.textContent = "Заполните первую передачу"; return; }
   if (v && !/^https?:\/\//i.test(v)) { er.textContent = "Ссылка на видео должна начинаться с https://"; return; }
-  const g = { id: String(Date.now()), team: $("#gTeam").value, per: $("#gPer").value, t: $("#gTime").value.trim(), st: $("#gStr").value, p, a: $("#gAs").value.trim(), v };
+  // p и a — готовый текст для списка голов в матче; sc и as — структурные данные для статистики
+  const g = { id: String(Date.now()), team: $("#gTeam").value, per: $("#gPer").value, t: $("#gTime").value.trim(), st: $("#gStr").value, p: gLabel(sc), a: assists.map(gLabel).join(", "), sc: gClean(sc), as: assists.map(gClean), v };
   const file = pendingVideo;
   if (file) {
     if (!Backend.storage) { er.textContent = "Хранилище видео не подключено. Включите Storage в Firebase (см. инструкцию) или вставьте ссылку."; return; }
@@ -512,7 +527,10 @@ async function goalAdd() {
     upPct = null; pendingVideo = null;
   }
   const goals = [...((LM[key] && LM[key].goals) || []), g].slice(0, 60);
-  try { await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, goals }, { merge: true }); setVid(); }
+  try {
+    await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, goals }, { merge: true });
+    gReset(); setVid(); refreshModal();   // форма очищается, список голов и статистика обновляются
+  }
   catch (e) { const er2 = $("#gErr"); if (er2) er2.textContent = "Не удалось сохранить. Проверьте правила Firestore."; }
 }
 async function goalDel(id) {
@@ -523,6 +541,133 @@ async function goalDel(id) {
     await Backend.db.collection("matches").doc(key).update({ goals });
     if (old && old.vp && Backend.storage) Backend.storage.ref(old.vp).delete().catch(() => {});   // чистим файл, чтобы не занимал место
   } catch (e) { alert("Не удалось удалить гол."); }
+}
+
+// ---------- Выбор игроков при вводе гола ----------
+// Игрок ищется среди заявки выбранной команды (ROSTERS в data.js + составы на матчи); номер подставляется сам.
+const gSel = { P: null, A1: null, A2: null };   // выбранные игроки: { n, name }
+const gRes = { P: [], A1: [], A2: [] };         // текущие результаты поиска для каждого поля
+const gKeys = ["P", "A1", "A2"];
+const gNum = x => x == null || x.n === null || x.n === undefined || x.n === "" || isNaN(+x.n) ? null : +x.n;
+const gLabel = x => (gNum(x) !== null ? gNum(x) + ". " : "") + x.name;
+const gClean = x => ({ n: gNum(x), name: x.name });
+const gSame = (a, b) => (gNum(a) !== null && gNum(a) === gNum(b)) || qn(a.name) === qn(b.name);
+// ручной ввод вида «77. Зуган Д.» (запасной вариант, если игрока нет в списке команды)
+const parseWho = s => { s = String(s || "").trim(); const m = s.match(/^(\d{1,2})\s*[.)\-]?\s*(\D.*)$/); return m ? { n: +m[1], name: m[2].trim() } : { n: null, name: s }; };
+function goalTeamId() {
+  const m = MATCHES.find(x => matchKey(x) === currentMatch), s = $("#gTeam");
+  return m && s ? (s.value === "away" ? m.away : m.home) : null;
+}
+function gClearPlayers() {
+  gKeys.forEach(k => { gSel[k] = null; const i = $("#g" + k), b = $("#gf" + k); if (i) i.value = ""; if (b) b.innerHTML = ""; });
+}
+function gReset() {
+  gClearPlayers();
+  ["gTime", "gV"].forEach(id => { const i = $("#" + id); if (i) i.value = ""; });
+}
+// в форме гола что-то введено — не перерисовываем окно, чтобы не стереть ввод
+function gDirty() {
+  return gKeys.some(k => { const i = $("#g" + k); return i && i.value; }) || !!($("#gTime") && $("#gTime").value) || !!($("#gV") && $("#gV").value) || !!pendingVideo;
+}
+function gFind(which) {
+  const inp = $("#g" + which), box = $("#gf" + which); if (!inp || !box) return;
+  if (gSel[which] && inp.value !== gLabel(gSel[which])) gSel[which] = null;   // текст изменили — выбор сбрасывается
+  if (gSel[which]) { box.innerHTML = ""; return; }
+  const q = qn(inp.value), id = goalTeamId(), all = id ? knownPlayers(id) : [];
+  const taken = gKeys.filter(k => k !== which && gSel[k]).map(k => gSel[k]);
+  const list = all.filter(p => qHit(p, q) && !taken.some(t => gSame(t, p))).sort((a, b) => (gNum(a) ?? 999) - (gNum(b) ?? 999));
+  gRes[which] = list.slice(0, 30);
+  const role = { G: "вратарь", D: "защитник", F: "нападающий" };
+  box.innerHTML = gRes[which].length
+    ? gRes[which].map((p, i) => `<button class="btn ghost foundbtn" type="button" data-gpick="${which}:${i}"><b>${esc(gNum(p) ?? "–")}</b> ${esc(p.name)} <small>${role[p.pos] || ""}</small></button>`).join("")
+    : q ? `<p class="hint">Никого не найдено — игрок запишется по тексту, который вы ввели</p>`
+    : all.length ? "" : `<p class="hint">Список игроков команды пока пуст. Введите вручную, например: 77. Зуган</p>`;
+}
+function gPick(ref) {
+  const [w, i] = ref.split(":"), p = (gRes[w] || [])[+i]; if (!p) return;
+  gSel[w] = { n: gNum(p), name: p.name };
+  $("#g" + w).value = gLabel(gSel[w]);   // номер подставляется автоматически
+  $("#gf" + w).innerHTML = "";
+}
+// итог поля: игрок, null (поле пустое) или false (по запросу несколько игроков, нужно выбрать)
+function gResolve(which, teamId) {
+  const inp = $("#g" + which), txt = inp ? inp.value.trim() : "";
+  if (!txt) return null;
+  if (gSel[which] && txt === gLabel(gSel[which])) return gSel[which];
+  const q = qn(txt), hits = (teamId ? knownPlayers(teamId) : []).filter(p => qHit(p, q));
+  if (hits.length === 1) return hits[0];
+  if (hits.length > 1) {
+    const ex = hits.filter(p => qn(p.name) === q || (gNum(p) !== null && String(gNum(p)) === q));
+    return ex.length === 1 ? ex[0] : false;
+  }
+  return parseWho(txt);
+}
+document.addEventListener("input", e => { const w = e.target.dataset && e.target.dataset.gps; if (w) gFind(w); });
+document.addEventListener("focusin", e => { const w = e.target.dataset && e.target.dataset.gps; if (w) gFind(w); });
+document.addEventListener("change", e => { if (e.target.id === "gTeam") gClearPlayers(); });   // сменили команду — игроки выбираются заново
+document.addEventListener("click", e => {
+  const pk = e.target.closest("[data-gpick]"); if (pk) return gPick(pk.dataset.gpick);
+  if (!e.target.closest(".gps, .gfound")) document.querySelectorAll(".gfound").forEach(b => { b.innerHTML = ""; });
+  const sa = e.target.closest("[data-stall]"); if (sa) { ui.statsAll[sa.dataset.stall] = !ui.statsAll[sa.dataset.stall]; renderStats(); }
+});
+
+// ---------- Статистика игроков ----------
+// Считается на лету из голов в карточках матчей: гол — 1 очко автору, передача — 1 очко ассистенту (максимум две на гол).
+ui.statsAll = {};
+function statsData() {
+  const byKey = new Map(MATCHES.map(m => [matchKey(m), m]).filter(([k]) => k));
+  const rosters = {}, rows = new Map();
+  const roster = id => rosters[id] || (rosters[id] = knownPlayers(id));
+  const row = (team, p) => {
+    let n = gNum(p), name = String((p && p.name) || "").trim();
+    if (!name && n === null) return null;
+    const list = roster(team);
+    const hit = (n !== null && list.find(x => gNum(x) === n)) || (name && list.find(x => qn(x.name) === qn(name)));
+    if (hit) { if (n === null) n = gNum(hit); name = hit.name; }   // имя и номер берём из заявки, чтобы один игрок не раздваивался
+    const key = team + "|" + (n !== null ? "#" + n : qn(name));
+    let r = rows.get(key); if (!r) rows.set(key, r = { team, n, name: name || "№" + n, g: 0, a: 0 });
+    return r;
+  };
+  Object.entries(LM).forEach(([key, d]) => {
+    const m = byKey.get(key); if (!m || !d || !Array.isArray(d.goals)) return;
+    d.goals.forEach(g => {
+      const team = g.team === "away" ? m.away : m.home;
+      // новые голы хранят sc/as; старые (введённые текстом) разбираются из p/a
+      const sc = g.sc || (g.p ? parseWho(g.p) : null);
+      const as = Array.isArray(g.as) ? g.as : String(g.a || "").split(/[,;]/).map(s => s.trim()).filter(Boolean).map(parseWho);
+      const rs = sc && row(team, sc); if (rs) rs.g++;
+      as.slice(0, 2).forEach(x => { const ra = row(team, x); if (ra) ra.a++; });
+    });
+  });
+  return [...rows.values()].map(r => ({ ...r, pts: r.g + r.a }));
+}
+const STAT_TABLES = [
+  { id: "pts", title: "Лидеры по очкам", hint: "Очки = голы + передачи", col: "pts", then: "g" },
+  { id: "g", title: "Лидеры по голам", hint: "Количество заброшенных шайб", col: "g", then: "pts" },
+  { id: "a", title: "Лидеры по передачам", hint: "Количество результативных передач", col: "a", then: "pts" }
+];
+function statsTable(def, all) {
+  const rows = all.filter(r => r[def.col] > 0).sort((a, b) => b[def.col] - a[def.col] || b[def.then] - a[def.then] || a.name.localeCompare(b.name, "ru"));
+  const open = !!ui.statsAll[def.id], shown = open ? rows : rows.slice(0, 20);
+  let place = 0, prev = null;
+  const th = (k, t) => `<th class="${def.col === k ? "pri" : ""}">${t}</th>`;
+  const td = (r, k) => `<td class="${def.col === k ? "pri" : ""}">${def.col === k ? `<b>${r[k]}</b>` : r[k]}</td>`;
+  const body = shown.map((r, i) => {
+    if (r[def.col] !== prev) { place = i + 1; prev = r[def.col]; }   // у равных результатов одно и то же место
+    const t = T(r.team);
+    return `<tr><td>${place}</td><td class="l"><div class="tm">${badge(t)}<span class="pl"><b>${esc(r.name)}</b><small>${r.n !== null ? "№" + r.n + " · " : ""}${esc(t ? t.name : r.team)}</small></span></div></td>${td(r, "g")}${td(r, "a")}${td(r, "pts")}</tr>`;
+  }).join("");
+  const more = rows.length > 20 ? `<button class="btn ghost stbtn" type="button" data-stall="${def.id}">${open ? "Свернуть" : "Показать всех (" + rows.length + ")"}</button>` : "";
+  return `<div class="box"><h3>${def.title}</h3><p class="hint">${def.hint}</p>` + (rows.length
+    ? `<div class="tw"><table><tr><th>№</th><th class="l">Игрок</th>${th("g", "Г")}${th("a", "П")}${th("pts", "О")}</tr>${body}</table></div>${more}`
+    : `<p class="hint">Пока нет данных</p>`) + `</div>`;
+}
+function renderStats() {
+  const el = $("#statsBody"); if (!el) return;
+  const all = statsData();
+  el.innerHTML = all.length
+    ? `<div class="stats">${STAT_TABLES.map(d => statsTable(d, all)).join("")}</div>`
+    : `<p class="hint" style="margin-top:18px">Пока никто не забивал. Статистика появится, когда в карточках матчей будут внесены голы и передачи.</p>`;
 }
 
 function loadScript(src) {
@@ -542,13 +687,13 @@ async function initBackend() {
     try { Backend.storage = firebase.storage(); } catch (_) { Backend.storage = null; }
     Backend.db.collection("lineups").onSnapshot(snap => {
       LU = {}; snap.forEach(d => { LU[d.id] = d.data(); }); LU = withPresets(LU);
-      renderSchedule(); renderHome();
+      renderSchedule(); renderHome(); renderStats();
       refreshModal();
     }, err => console.warn("lineups", err));
     // живые матчи: статус «Идёт», счёт и итог (пишет только создатель)
     Backend.db.collection("matches").onSnapshot(snap => {
       LM = {}; snap.forEach(d => { LM[d.id] = d.data(); });
-      applyLive(); renderHome(); renderSchedule(); renderTable();
+      applyLive(); renderHome(); renderSchedule(); renderTable(); renderStats();
       refreshModal();
     }, err => console.warn("matches", err));
     Backend.auth.onAuthStateChanged(u => {
@@ -675,6 +820,7 @@ function lineupsHtml(hd, ad) {
 }
 function matchModal(key) {
   const m = MATCHES.find(x => matchKey(x) === key); if (!m) return;
+  if (currentMatch !== key) gKeys.forEach(k => { gSel[k] = null; });   // открыли другой матч — выбранные игроки сбрасываются
   const my = coachTeam(), H = T(m.home), A = T(m.away);
   const hd = LU[`${key}__${m.home}`], ad = LU[`${key}__${m.away}`];
   const head = `<div class="mh"><div class="mt">${badge(H)}<b>${esc(H.name)}</b></div><div class="mt r"><b>${esc(A.name)}</b>${badge(A)}</div></div>`;
