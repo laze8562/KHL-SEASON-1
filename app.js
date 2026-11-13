@@ -399,6 +399,13 @@ document.addEventListener("click", e => {
   if (e.target.id === "coachBack") entryModal();
   const mk = e.target.closest("[data-mk]"); if (mk && !e.target.closest("a")) matchModal(mk.dataset.mk);
   const de = e.target.closest("[data-edit]"); if (de) editorModal(de.dataset.edit, de.dataset.team);
+  const dx = e.target.closest("[data-xfer]"); if (dx) transferModal(dx.dataset.xfer, dx.dataset.team);
+  const xp = e.target.closest("[data-xpick]"); if (xp) transferApply(xp.dataset.xpick);
+  const dpl = e.target.closest("[data-pt]"); if (dpl && !e.target.closest("[data-xfer],[data-edit]")) playerModal(currentMatch, dpl.dataset.pt, dpl.dataset.pn);
+  if (e.target.closest("[data-repl]")) replaceModal();
+  const rp = e.target.closest("[data-rp]"); if (rp && !rp.disabled) replaceApply(+rp.dataset.rp);
+  if (e.target.id === "xBack") matchModal(currentMatch);
+  if (e.target.id === "pBack") playerModal(replCtx.key, replCtx.team, replCtx.name);
   const cp = e.target.closest("[data-copy]"); if (cp) copyCred(cp);
   const ms = e.target.closest("[data-ms]"); if (ms) matchAction(ms.dataset.ms);
   const ga = e.target.closest("[data-gadd]"); if (ga) goalAdd();
@@ -407,6 +414,8 @@ document.addEventListener("click", e => {
   const gv = e.target.closest("[data-gvt]"); if (gv) goalSetVt(gv.dataset.gvt);
   if (e.target.closest("[data-ytsave]")) ytSave();
   if (e.target.closest("[data-ytdock]")) ytDockOpen();
+  const vmd = e.target.closest("[data-vmdel]"); if (vmd) marksDel(+vmd.dataset.vmdel);
+  if (e.target.closest("[data-vattach]")) marksAttach();
   const yd = e.target.closest("[data-ytd]"); if (yd) ytDockAct(yd.dataset.ytd);
   const vp = e.target.closest("[data-vplay]"); if (vp) playVideo(vp.dataset.vplay);
   if (e.target.closest("[data-vclear]")) { pendingVideo = null; setVid(); }
@@ -479,6 +488,7 @@ function applyLive() {
 }
 // перерисовать открытое окно матча, не сбрасывая прокрутку
 function refreshModal() {
+  const vmk = $("#vmarks"); if (vmk && currentMatch) vmk.innerHTML = marksHtml(LM[currentMatch]);   // метки обновляются сразу, даже если форма гола заполнена
   const ae = document.activeElement;
   if (ae && ae.closest && ae.closest("#modalBody") && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;   // не сбивать ввод
   if (currentMatch && $("#gP") && gDirty()) return;   // в форме гола уже что-то введено
@@ -513,7 +523,7 @@ function goalsHtml(d, admin) {
     const sc = g.team === "away" ? `<span class="dim">${h}</span>:<b>${a}</b>` : `<b>${h}</b>:<span class="dim">${a}</span>`;
     const okv = g.v && /^https?:\/\//i.test(g.v);
     const play = !okv ? "" : g.vf ? `<button type="button" class="gplay" data-vplay="${esc(g.v)}" aria-label="Смотреть момент">▶</button>` : `<a class="gplay" href="${esc(g.v)}" target="_blank" rel="noopener" aria-label="Смотреть момент">▶</a>`;
-    const yid = ytId(d && d.yt), hasVt = typeof g.vt === "number";
+    const yid = matchVideo(d), hasVt = typeof g.vt === "number";
     const ytb = !okv && yid && hasVt ? `<button type="button" class="gplay yt" data-ytplay="${esc(g.id)}" aria-label="Смотреть повтор">▶</button>` : "";
     const tm = admin && yid ? `<button type="button" class="gdel gvt" data-gvt="${esc(g.id)}" aria-label="Время в видео" title="Время гола в видео">⏱</button>` : "";
     const del = admin ? `<button type="button" class="gdel" data-gdel="${esc(g.id)}" aria-label="Удалить гол">✕</button>` : "";
@@ -537,7 +547,7 @@ function goalsAdmin(m, d) {
     <p class="glab">Вторая передача (необязательно)</p>
     <input class="inp gps" id="gA2" data-gps="A2" placeholder="🔍 Поиск игрока: номер или фамилия" autocomplete="off">
     <div class="gfound" id="gfA2"></div>
-    <input class="inp" id="gVt" placeholder="Время гола в видео YouTube, например 23:41 (необязательно)" inputmode="numeric" autocomplete="off">
+    <input class="inp" id="gVt" placeholder="Время гола в видео, например 23:41 (необязательно: можно расставить по меткам)" inputmode="numeric" autocomplete="off">
     <div id="gVid">${vidPick()}</div>
     <input class="inp" id="gV" placeholder="Или ссылка на видео (необязательно)" inputmode="url" autocomplete="off">
     <div class="err" id="gErr"></div>
@@ -646,82 +656,116 @@ async function goalAdd() {
   }
   const goals = [...((LM[key] && LM[key].goals) || []), g].slice(0, 60);
   try {
-    await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, goals }, { merge: true });
+    await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, goals, ...(vt !== null ? { vm: firebase.firestore.FieldValue.arrayRemove(vt) } : {}) }, { merge: true });
     gReset(); setVid(); refreshModal();   // форма очищается, список голов и статистика обновляются
   }
   catch (e) { const er2 = $("#gErr"); if (er2) er2.textContent = "Не удалось сохранить. Проверьте правила Firestore."; }
 }
-// ---------- Видео игры на YouTube: повтор каждого гола ----------
+// ---------- Видео игры (любая площадка): повтор каждого гола ----------
+// Площадки и плееры описаны в video.js. Ссылка хранится в поле vu (старое поле yt — только YouTube — тоже читается).
 const YT_BEFORE = 10, YT_AFTER = 15;   // секунд до гола и после него
-function ytId(url) {
-  const m = String(url || "").trim().match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|live\/|embed\/|shorts\/|v\/))([\w-]{11})/i);
-  return m ? m[1] : null;
-}
+const matchVideo = d => VID.parse(d && (d.vu || d.yt));
 function parseVt(s) {   // "23:41", "1:05:12" или секунды -> число секунд
   const p = String(s).trim().split(":").map(x => x.trim());
   if (!p.length || p.length > 3 || p.some(x => !/^\d+$/.test(x))) return null;
   return p.reduce((t, x) => t * 60 + +x, 0);
 }
 const fmtVt = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), c = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(c).padStart(2, "0"); };
+// метки: секунды видео, где создатель нажал «⚑ Гол» в плеере (поле vm в документе матча)
+const marksOf = d => ((d && d.vm) || []).filter(x => typeof x === "number").sort((a, b) => a - b);
+const unplaced = d => goalsSorted((d && d.goals) || []).filter(g => typeof g.vt !== "number");   // голы, у которых ещё нет времени в видео
+function marksHtml(d) {
+  if (!matchVideo(d)) return "";
+  const mk = marksOf(d), up = unplaced(d);
+  if (!mk.length) return `<p class="hint">Меток пока нет. Откройте плеер и нажимайте «⚑ Гол» в момент каждого гола.</p>`;
+  const chips = mk.map(t => `<span class="vmk">${fmtVt(t)}<button type="button" data-vmdel="${t}" aria-label="Убрать метку">✕</button></span>`).join("");
+  return `<p class="glab">Меток: ${mk.length} · голов без времени: ${up.length}</p><div class="vmks">${chips}</div>` + (mk.length === up.length
+    ? `<button class="btn" type="button" data-vattach="1">⚡ Расставить по меткам</button>`
+    : `<p class="hint">Чтобы расставить автоматически, меток и голов без времени должно быть поровну: добавьте недостающие голы или уберите лишнюю метку (✕).</p>`);
+}
 function ytAdmin(key, d) {
-  return `<div class="box adm"><h3>Видео игры (YouTube)</h3><p class="hint">Вставьте ссылку на запись матча и сохраните. Затем откройте плеер: пока смотрите игру, нажимайте «⏱ В поле гола» — время подставится само. У готового гола кнопка ⏱ тоже берёт время из плеера.</p>
-    <input class="inp" id="ytUrl" placeholder="https://youtu.be/..." inputmode="url" autocomplete="off" value="${esc((d && d.yt) || "")}">
+  const v = matchVideo(d);
+  return `<div class="box adm"><h3>Видео игры</h3><p class="hint">Вставьте ссылку на запись матча (${esc(VID.SUPPORTED)}) и сохраните. Откройте плеер и по ходу игры нажимайте «⚑ Гол» — время запомнится само. Потом добавьте голы как обычно и нажмите «Расставить по меткам»: вводить время вручную не нужно.</p>
+    <input class="inp" id="ytUrl" placeholder="Ссылка на видео матча" inputmode="url" autocomplete="off" value="${esc((d && (d.vu || d.yt)) || "")}">
     <div class="err" id="ytErr"></div>
     <button class="btn" type="button" data-ytsave="1">💾 Сохранить видео</button>
-    ${ytId(d && d.yt) ? `<button class="btn ghost" type="button" data-ytdock="1">▶ Открыть плеер: брать время голов</button>` : ""}</div>`;
+    ${v ? `<button class="btn ghost" type="button" data-ytdock="1">▶ Открыть плеер (${esc(v.label)})</button>` : ""}
+    <div id="vmarks">${marksHtml(d)}</div></div>`;
 }
 async function ytSave() {
   const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key), er = $("#ytErr");
   if (!isAdmin() || !Backend.db || !m) return;
   const url = $("#ytUrl").value.trim();
-  if (url && !ytId(url)) { er.textContent = "Не похоже на ссылку YouTube"; return; }
+  if (url && !VID.parse(url)) { er.textContent = "Не распознал ссылку. Поддерживаются: " + VID.SUPPORTED; return; }
   try {
-    await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, yt: url }, { merge: true });
+    await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, vu: url, yt: firebase.firestore.FieldValue.delete() }, { merge: true });
     er.textContent = url ? "Сохранено ✓" : "Видео убрано";
   } catch (e) { er.textContent = "Не удалось сохранить. Проверьте вход создателя."; }
 }
+async function marksDel(t) {
+  const key = currentMatch; if (!isAdmin() || !Backend.db || !key) return;
+  try { await Backend.db.collection("matches").doc(key).update({ vm: firebase.firestore.FieldValue.arrayRemove(t) }); }
+  catch (e) { alert("Не удалось убрать метку."); }
+}
+// метки по порядку -> голы по порядку игры; перед записью показываем, что с чем совпало
+async function marksAttach() {
+  const key = currentMatch, d = LM[key]; if (!isAdmin() || !Backend.db || !d) return;
+  const r = VID.pairMarks(unplaced(d), marksOf(d));
+  if (!r.ok) { alert(r.why === "count" ? `Меток ${r.marks}, голов без времени ${r.goals}: должно быть поровну.` : r.why === "nomarks" ? "Меток пока нет." : "Нет голов без времени в видео."); return; }
+  const list = r.pairs.map(([g, t], i) => `${i + 1}. ${g.per ? g.per + " период " : ""}${g.t || ""} ${g.p} → ${fmtVt(t)}`).join("\n");
+  if (!confirm("Расставить время в видео так?\n\n" + list)) return;
+  const at = new Map(r.pairs.map(([g, t]) => [g.id, t]));
+  const goals = (d.goals || []).map(g => at.has(g.id) ? { ...g, vt: at.get(g.id) } : g);
+  try { await Backend.db.collection("matches").doc(key).update({ goals, vm: [] }); }
+  catch (e) { alert("Не удалось сохранить время."); }
+}
 
 // ---------- Плеер-помощник: время гола берётся прямо из видео ----------
-let ytp = null, ytTimer = null, ytApi = null;
-function ytLoadApi() {
-  if (ytApi) return ytApi;
-  return ytApi = new Promise(res => {
-    if (window.YT && window.YT.Player) return res();
-    window.onYouTubeIframeAPIReady = res;
-    const s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(s);
-  });
-}
-const ytNow = () => { try { return ytp && ytp.getCurrentTime ? Math.floor(ytp.getCurrentTime()) : null; } catch (e) { return null; } };
+let ytp = null, ytTimer = null;
+const ytNow = () => { try { const t = ytp ? ytp.time() : null; return typeof t === "number" && isFinite(t) ? Math.floor(t) : null; } catch (e) { return null; } };
 function ytDockClose() {
   clearInterval(ytTimer); ytTimer = null;
-  try { if (ytp && ytp.destroy) ytp.destroy(); } catch (e) {}
+  try { if (ytp) ytp.destroy(); } catch (e) {}
   ytp = null;
   const d = $("#ytdock"); if (d) d.remove();
 }
 async function ytDockOpen() {
-  const d = LM[currentMatch], id = ytId(d && d.yt);
-  if (!id) { alert("Сначала сохраните ссылку на видео"); return; }
+  const d = LM[currentMatch], v = matchVideo(d);
+  if (!v) { alert("Сначала сохраните ссылку на видео"); return; }
   ytDockClose();
   const dock = document.createElement("div"); dock.id = "ytdock"; dock.className = "ytdock";
   dock.innerHTML = `<div class="ytdh"><b>Время голов</b><span id="ytdT">0:00</span><button type="button" data-ytd="min" aria-label="Свернуть">▁</button><button type="button" data-ytd="x" aria-label="Закрыть">✕</button></div>
     <div class="ytdp"><div id="ytdPlayer"></div></div>
-    <div class="ytdb"><button type="button" data-ytd="-10">−10 с</button><button type="button" data-ytd="+10">+10 с</button><button type="button" class="take" data-ytd="take">⏱ В поле гола</button></div>
-    <div class="ytdm" id="ytdMsg"></div>`;
+    <div class="ytdb"><button type="button" data-ytd="-10">−10 с</button><button type="button" data-ytd="+10">+10 с</button><button type="button" data-ytd="take">⏱ В форму</button><button type="button" class="take" data-ytd="mark">⚑ Гол</button></div>
+    <div class="ytdm" id="ytdMsg">Загружаю плеер…</div>`;
   document.body.appendChild(dock);
-  await ytLoadApi();
-  ytp = new YT.Player("ytdPlayer", { videoId: id, width: "100%", height: "100%", playerVars: { playsinline: 1, rel: 0, modestbranding: 1 } });
+  const msg = $("#ytdMsg");
+  try {
+    const c = await VID.mount($("#ytdPlayer"), v, {});
+    if ($("#ytdock") !== dock) { c.destroy(); return; }   // окно закрыли, пока плеер грузился
+    ytp = c; msg.textContent = "Запустите видео и нажимайте «⚑ Гол» в момент каждого гола.";
+  } catch (e) { msg.textContent = (e && e.message) || "Плеер не открылся"; return; }
   ytTimer = setInterval(() => { const t = ytNow(), e = $("#ytdT"); if (e && t !== null) e.textContent = fmtVt(t); }, 500);
 }
-function ytDockAct(act) {
+async function ytDockAct(act) {
   const msg = $("#ytdMsg"), t = ytNow();
   if (act === "x") { ytDockClose(); return; }
   if (act === "min") { $("#ytdock").classList.toggle("min"); return; }
-  if (t === null) { msg.textContent = "Плеер ещё загружается…"; return; }
-  if (act === "-10" || act === "+10") { ytp.seekTo(Math.max(0, t + (act === "-10" ? -10 : 10)), true); return; }
+  if (t === null) { msg.textContent = "Плеер ещё не отдаёт время — запустите видео."; return; }
+  if (act === "-10" || act === "+10") { ytp.seek(Math.max(0, t + (act === "-10" ? -10 : 10))); return; }
   if (act === "take") {
     const f = $("#gVt");
     if (!f) { msg.textContent = "Откройте матч и форму «Добавить гол»"; return; }
     f.value = fmtVt(t); msg.textContent = "Время " + fmtVt(t) + " записано в поле гола ✓";
+  }
+  if (act === "mark") {
+    const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key);
+    if (!isAdmin() || !Backend.db || !m) return;
+    if (t <= 0) { msg.textContent = "Время 0:00 — сначала запустите видео."; return; }
+    try {
+      await Backend.db.collection("matches").doc(key).set({ home: m.home, away: m.away, tour: m.tour, vm: firebase.firestore.FieldValue.arrayUnion(t) }, { merge: true });
+      msg.textContent = "Метка " + fmtVt(t) + " сохранена ✓";
+    } catch (e) { msg.textContent = "Не удалось сохранить метку."; }
   }
 }
 async function goalSetVt(id) {
@@ -736,16 +780,24 @@ async function goalSetVt(id) {
   catch (e) { alert("Не удалось сохранить время."); }
 }
 function ytPlay(id) {
-  const key = currentMatch, d = LM[key], yid = ytId(d && d.yt); if (!d || !yid) return;
+  const key = currentMatch, d = LM[key], v = matchVideo(d); if (!d || !v) return;
   const list = goalsSorted(d.goals || []); let h = 0, a = 0, g = null;
   for (const x of list) { if (x.team === "away") a++; else h++; if (x.id === id) { g = x; break; } }
   if (!g || typeof g.vt !== "number") return;
   const start = Math.max(0, g.vt - YT_BEFORE), end = g.vt + YT_AFTER;
-  const src = `https://www.youtube-nocookie.com/embed/${yid}?start=${start}&end=${end}&autoplay=1&rel=0&playsinline=1&modestbranding=1`;
   const o = document.createElement("div"); o.className = "vlay";
-  o.innerHTML = `<button type="button" class="vx" aria-label="Закрыть">✕</button><div class="ytw"><div class="ytcap"><b>${esc(g.p)}</b>${g.a ? `<span>${esc(g.a)}</span>` : ""}<small>${esc(g.t || "")} · счёт ${h}:${a}</small></div><div class="ytf"><iframe src="${esc(src)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div></div>`;
-  o.addEventListener("click", e => { if (e.target === o || e.target.classList.contains("vx")) o.remove(); });
+  o.innerHTML = `<button type="button" class="vx" aria-label="Закрыть">✕</button><div class="ytw"><div class="ytcap"><b>${esc(g.p)}</b>${g.a ? `<span>${esc(g.a)}</span>` : ""}<small>${esc(g.t || "")} · счёт ${h}:${a}</small></div><div class="ytf"></div><div class="ytm"></div></div>`;
+  const box = o.querySelector(".ytf"); let ctrl = null;
+  o.addEventListener("click", e => { if (e.target === o || e.target.classList.contains("vx")) { if (ctrl) ctrl.destroy(); o.remove(); } });
   document.body.appendChild(o);
+  if (v.kind === "yt") {   // YouTube умеет сам играть отрезок: start и end прямо в ссылке
+    const src = `https://www.youtube-nocookie.com/embed/${v.id}?start=${start}&end=${end}&autoplay=1&rel=0&playsinline=1&modestbranding=1`;
+    box.innerHTML = `<iframe src="${esc(src)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+    return;
+  }
+  VID.mount(box, v, { start, end, autoplay: true }).then(c => { if (!o.isConnected) c.destroy(); else ctrl = c; }).catch(e => {
+    o.querySelector(".ytm").innerHTML = `${esc((e && e.message) || "Плеер не открылся")}. <a href="${esc(v.url)}" target="_blank" rel="noopener">Открыть видео на площадке</a> и перемотать на ${fmtVt(g.vt)}.`;
+  });
 }
 async function goalDel(id) {
   const key = currentMatch; if (!isAdmin() || !key || !LM[key] || !confirm("Удалить этот гол?")) return;
@@ -1026,12 +1078,16 @@ document.addEventListener("submit", async e => {
 
 // ---------- Состав: просмотр (в стиле карточки матча КХЛ) ----------
 const splitName = s => { s = String(s || "").trim(); const i = s.indexOf(" "); return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)]; };
-const byPos = (d, p) => d ? (d.players || []).filter(x => x.pos === p).sort((a, b) => (a.line || 9) - (b.line || 9) || a.n - b.n) : [];
+const byPos = (d, p) => d ? (d.players || []).filter(x => x.pos === p).sort((a, b) => (a.line || 9) - (b.line || 9) || a.n - b.n).map(x => ({ ...x, _t: d.team })) : [];
+// нажать на игрока может создатель (любая команда) и тренер (своя): открывается карточка с кнопкой «Заменить на похожего»
+const canTeam = t => !!t && (isAdmin() || t === coachTeam());
+const plA = x => x && canTeam(x._t) ? ` data-pt="${esc(x._t)}" data-pn="${esc(x.name)}" role="button"` : "";
+const plC = x => x && canTeam(x._t) ? " plk" : "";
 const whenHtml = d => { try { return d && d.updatedAt && d.updatedAt.toDate ? d.updatedAt.toDate().toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""; } catch (_) { return ""; } };
 // игрок на льду: круглый аватар, номер сбоку (у хозяев слева, у гостей справа), фамилия под ним
 const SIL = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="18" r="8"/><path d="M8 46c0-10 7-16 16-16s16 6 16 16z"/></svg>`;
 const rc = (x, side) => x
-  ? `<div class="rc ${side}"><span class="pa">${x.photo ? `<img src="${esc(x.photo)}" alt="">` : SIL}<span class="pb">${esc(x.n)}</span></span><small>${esc(splitName(x.name)[0])}${splitName(x.name)[1] ? "<br>" + esc(splitName(x.name)[1]) : ""}</small></div>`
+  ? `<div class="rc ${side}${plC(x)}"${plA(x)}><span class="pa">${x.photo ? `<img src="${esc(x.photo)}" alt="">` : SIL}<span class="pb">${esc(x.n)}</span></span><small>${esc(splitName(x.name)[0])}${splitName(x.name)[1] ? "<br>" + esc(splitName(x.name)[1]) : ""}</small></div>`
   : `<div class="rc"></div>`;
 function rinkHtml(hd, ad) {
   const col = d => { const g = byPos(d, "G")[0], D = byPos(d, "D"), F = byPos(d, "F"); return { out: [D[0], g, D[1]], inn: [F[0], F[1], F[2]] }; };
@@ -1046,7 +1102,7 @@ function pairsHtml(title, ha, aa) {
   const nm = (x, right) => { if (!x) return ""; const [s, r] = splitName(x.name); return `<span class="nmb${right ? "" : " l"}"><b>${esc(s)}</b>${r ? "<br>" + esc(r) : ""}</span>`; };
   const pn = x => x ? `<span class="pb">${esc(x.n)}</span>` : "";
   let rows = "";
-  for (let i = 0; i < n; i++) rows += `<div class="pr"><div class="pc l">${nm(ha[i], false)}${pn(ha[i])}</div><div class="pc">${pn(aa[i])}${nm(aa[i], true)}</div></div>`;
+  for (let i = 0; i < n; i++) rows += `<div class="pr"><div class="pc l${plC(ha[i])}"${plA(ha[i])}>${nm(ha[i], false)}${pn(ha[i])}</div><div class="pc${plC(aa[i])}"${plA(aa[i])}>${pn(aa[i])}${nm(aa[i], true)}</div></div>`;
   return `<div class="lgh"><span>${title}</span></div><div class="prs">${rows}</div>`;
 }
 function lineupsHtml(hd, ad) {
@@ -1061,14 +1117,16 @@ function matchModal(key) {
   const body = hd || ad ? lineupsHtml(hd, ad) : `<p class="hint">Составы пока не объявлены</p>`;
   const info = [[H, hd], [A, ad]].map(([t, d]) => d && whenHtml(d) ? `${esc(t.short || t.name)}: обновлён ${whenHtml(d)}` : "").filter(Boolean).join(" · ");
   const eb = (team, d, label) => `<button class="btn" data-edit="${key}" data-team="${team}">${d ? "✏️ Редактировать состав" : "➕ Записать состав"}${label}</button>`;
+  const xb = team => prevLineups(m, team).length ? `<button class="btn ghost" data-xfer="${key}" data-team="${team}">📋 Перенести состав (${esc(T(team).short || T(team).name)}) из прошлой игры</button>` : "";
   const edit = isAdmin()
-    ? eb(m.home, hd, ` — ${esc(H.short || H.name)}`) + eb(m.away, ad, ` — ${esc(A.short || A.name)}`)
-    : my && (my === m.home || my === m.away) ? eb(my, my === m.home ? hd : ad, "") : "";
+    ? eb(m.home, hd, ` — ${esc(H.short || H.name)}`) + xb(m.home) + eb(m.away, ad, ` — ${esc(A.short || A.name)}`) + xb(m.away)
+    : my && (my === m.home || my === m.away) ? eb(my, my === m.home ? hd : ad, "") + xb(my) : "";
+  const canClick = (hd || ad) && (isAdmin() || (my && (my === m.home || my === m.away)));
   const watch = `<a class="btn watch" href="${TWITCH_URL}" target="_blank" rel="noopener">📺 Смотреть игру</a>`;
   const d = LM[key], started = isStarted(d);
   const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small>${started ? periodsHtml(d, isAdmin() && d.status === "live") : ""}</div>`;
   const goals = goalsHtml(d, isAdmin());
-  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
+  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${canClick ? `<p class="hint">Нажмите на игрока в составе, чтобы заменить его на похожего.</p>` : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 
@@ -1116,14 +1174,15 @@ function eFind() {
     : `<p class="hint">Никого не найдено</p>`;
 }
 let editTeam = null;   // чей состав сейчас редактируется
-function editorModal(key, team) {
+function editorModal(key, team, src) {
   const m = MATCHES.find(x => matchKey(x) === key);
   const my = isAdmin() ? team : coachTeam();   // создатель правит любую из двух команд матча
   if (!m || !my || (m.home !== my && m.away !== my)) return;
   editTeam = my;
-  const d = LU[`${key}__${my}`], cur = new Map((d ? d.players : []).map(p => [p.name, p]));
+  const d = LU[`${key}__${my}`], base = src || d, cur = new Map((base ? base.players : []).map(p => [p.name, p]));
   const all = knownPlayers(my);
-  ed = { key, my, rows: { G: [], D: [], F: [] } };
+  (src ? src.players : []).forEach(p => { if (!all.some(x => x.name === p.name)) all.push({ n: p.n, name: p.name, pos: p.pos }); });
+  ed = { key, my, rows: { G: [], D: [], F: [] }, note: src ? `Состав перенесён из тура ${src.tour}. Пока ничего не записано: проверьте его и нажмите «Сохранить».` : "" };
   for (const pos of ["G", "D", "F"]) {
     ed.rows[pos] = all.filter(p => p.pos === pos).sort((a, b) => (a.n ?? 999) - (b.n ?? 999)).map(p => { const c = cur.get(p.name); return { pos, n: p.n == null ? "" : String(p.n), name: p.name, on: !!c, line: c && c.line ? String(c.line) : "" }; });
   }
@@ -1139,6 +1198,8 @@ function edMain() {
   openModal(`<h3>Состав: ${T(ed.my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
     <input class="inp" id="eSearch" type="search" placeholder="🔍 Поиск игрока: номер, имя или фамилия" autocomplete="off">
     <div id="eFound"></div>
+    ${ed.note ? `<p class="hint note">${esc(ed.note)}</p>` : ""}
+    ${prevLineups(m, ed.my).length ? `<button class="btn ghost" data-xfer="${ed.key}" data-team="${ed.my}" type="button">📋 Перенести состав (${esc(T(ed.my).short || T(ed.my).name)}) из прошлой игры</button>` : ""}
     <p class="hint">Или нажмите на раздел, чтобы выбрать игроков из списка команды.</p>
     ${blocks}
     <div class="err" id="eMsg"></div>
@@ -1186,6 +1247,95 @@ async function clearLineup() {
   if (!key || !my || (!isAdmin() && my !== coachTeam()) || !confirm("Удалить состав на этот матч?")) return;
   try { await Backend.db.collection("lineups").doc(`${key}__${my}`).delete(); matchModal(key); }
   catch (e) { $("#eMsg").textContent = "Не удалось удалить состав."; }
+}
+
+// ---------- Перенос состава из прошлой игры ----------
+const POS1 = { G: "вратарь", D: "защитник", F: "нападающий" };
+const roleName = p => p.line ? (LNL[p.pos] || [])[p.line - 1] || "" : "";
+// составы команды на матчи более ранних туров, самые свежие сверху
+function prevLineups(m, team) {
+  const key = matchKey(m);
+  return Object.values(LU).filter(d => d && d.team === team && d.match !== key && d.tour < m.tour && (d.players || []).length).sort((a, b) => b.tour - a.tour);
+}
+function transferModal(key, team) {
+  const m = MATCHES.find(x => matchKey(x) === key);
+  if (!m || !canTeam(team) || (m.home !== team && m.away !== team)) return;
+  const rows = prevLineups(m, team).map(d => {
+    const pm = MATCHES.find(x => matchKey(x) === d.match), opp = pm ? T(pm.home === team ? pm.away : pm.home) : null;
+    const sc = pm && pm.hs !== null ? ` · ${pm.home === team ? pm.hs + ":" + pm.as : pm.as + ":" + pm.hs}` : "";
+    return `<button class="btn ghost xpick" type="button" data-xpick="${esc(d.match)}"><span><b>Тур ${d.tour}</b>${opp ? " · против " + esc(opp.short || opp.name) : ""}${sc}</span><small>${d.players.length} игроков${d.preset ? " · не сохранён" : ""}</small></button>`;
+  }).join("");
+  openModal(`<h3>Перенести состав: ${esc(T(team).name)}</h3>
+    <p class="hint">${esc(T(m.home).name)} — ${esc(T(m.away).name)}, тур ${m.tour}. Выберите игру, состав которой взять. Он подставится в редактор, ничего не запишется, пока вы не нажмёте «Сохранить».</p>
+    ${rows || `<p class="hint">Прошлых составов этой команды пока нет</p>`}
+    <div><button class="btn ghost" id="xBack" type="button">Назад</button></div>`);
+  currentMatch = key; editing = true; xferTeam = team;
+}
+let xferTeam = null;
+function transferApply(srcKey) {
+  const key = currentMatch, team = xferTeam, src = LU[`${srcKey}__${team}`];
+  if (!key || !team || !src || !canTeam(team)) return;
+  editorModal(key, team, src);
+}
+
+// ---------- Игрок в составе: заменить на похожего ----------
+let replCtx = null;   // { key, team, name, list }
+function playerModal(key, team, name) {
+  const m = MATCHES.find(x => matchKey(x) === key), d = LU[`${key}__${team}`];
+  const p = d && (d.players || []).find(x => x.name === name);
+  if (!m || !p || !canTeam(team)) return;
+  replCtx = { key, team, name };
+  openModal(`<h3>${esc(p.name)}</h3>
+    <p class="hint">№ ${esc(p.n)} · ${POS1[p.pos] || ""}${roleName(p) ? " · " + roleName(p) : ""} · ${esc(T(team).name)}</p>
+    <button class="btn big" type="button" data-repl="1">🔁 Заменить на похожего</button>
+    <div><button class="btn ghost" id="xBack" type="button">Назад к составу</button></div>`);
+  currentMatch = key; editing = true;
+}
+// похожий = та же позиция; выше те, кто чаще играл в этой же паре или звене, затем те, кто чаще попадал в составы
+function similarList(d, p, team) {
+  const inLineup = new Set(d.players.map(x => x.name)), busy = new Set(d.players.filter(x => x.name !== p.name).map(x => +x.n));
+  const games = {}, slot = {};
+  Object.values(LU).filter(x => x && x.team === team && !x.preset && x.match !== d.match).forEach(x => (x.players || []).forEach(q => {
+    games[q.name] = (games[q.name] || 0) + 1;
+    if (p.line && q.pos === p.pos && q.line === p.line) slot[q.name] = (slot[q.name] || 0) + 1;
+  }));
+  const hasN = c => /^\d{1,2}$/.test(String(c.n ?? ""));
+  return knownPlayers(team).filter(c => c.pos === p.pos && !inLineup.has(c.name))
+    .map(c => ({ ...c, games: games[c.name] || 0, slot: slot[c.name] || 0, busy: hasN(c) && busy.has(+c.n), noNum: !hasN(c) }))
+    .sort((a, b) => a.busy - b.busy || b.slot - a.slot || b.games - a.games || (hasN(a) ? +a.n : 999) - (hasN(b) ? +b.n : 999));
+}
+function replaceModal() {
+  if (!replCtx) return;
+  const { key, team, name } = replCtx, d = LU[`${key}__${team}`], p = d && d.players.find(x => x.name === name);
+  if (!p || !canTeam(team)) return;
+  const list = replCtx.list = similarList(d, p, team);
+  const why = c => c.busy ? "номер занят в составе" : c.noNum ? "номер спросим при выборе" : c.slot ? `играл здесь: ${c.slot}` : c.games ? `в составах: ${c.games}` : "в заявке";
+  openModal(`<h3>Заменить: ${esc(p.name)}</h3>
+    <p class="hint">${POS1[p.pos] || "Игрок"}${roleName(p) ? ", " + roleName(p) : ""}. Сверху те, кто чаще играл в этой ${p.pos === "G" ? "роли" : p.pos === "D" ? "паре" : "звене"}. Новый игрок встанет на то же место.</p>
+    ${list.length ? list.map((c, i) => `<button class="btn ghost rpick" type="button" data-rp="${i}"${c.busy ? " disabled" : ""}><span><b>${esc(c.n || "–")}</b> ${esc(c.name)}</span><small>${why(c)}</small></button>`).join("") : `<p class="hint">Некем заменить: в заявке команды нет других ${p.pos === "G" ? "вратарей" : p.pos === "D" ? "защитников" : "нападающих"}. Добавить игрока можно в редакторе состава.</p>`}
+    <div><button class="btn ghost" id="pBack" type="button">Назад</button></div>`);
+  currentMatch = key; editing = true;
+}
+async function replaceApply(i) {
+  const ctx = replCtx, c = ctx && ctx.list && ctx.list[i]; if (!c) return;
+  const { key, team, name } = ctx, m = MATCHES.find(x => matchKey(x) === key), d = LU[`${key}__${team}`];
+  if (!m || !d || !canTeam(team)) return;
+  let num = c.noNum ? null : +c.n;
+  if (num === null) {   // в заявке у игрока нет номера: спрашиваем и проверяем, что он свободен
+    const r = prompt(`Номер игрока ${c.name} (0–99):`, ""); if (r === null) return;
+    if (!/^\d{1,2}$/.test(r.trim())) { alert("Номер должен быть от 0 до 99"); return; }
+    num = +r.trim();
+    if (d.players.some(x => x.name !== name && +x.n === num)) { alert(`Номер ${num} уже занят в составе`); return; }
+  }
+  if (!confirm(`Заменить ${name} на ${c.name} (№ ${num})?`)) return;
+  const players = d.players.map(p => p.name === name ? { n: num, name: c.name, pos: c.pos, ...(p.line ? { line: p.line } : {}), ...(c.photo ? { photo: c.photo } : {}) } : { ...p });
+  try {
+    await Backend.db.collection("lineups").doc(`${key}__${team}`).set({
+      team, match: key, tour: m.tour, home: m.home, away: m.away, players,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(), by: Backend.user.email
+    });
+    replCtx = null; matchModal(key);
+  } catch (e) { alert("Не удалось заменить. Проверьте интернет и что вы вошли как тренер этой команды."); }
 }
 
 // ---------- Запуск ----------
