@@ -409,6 +409,8 @@ document.addEventListener("click", e => {
   if (e.target.id === "xBack") matchModal(currentMatch);
   if (e.target.id === "pBack") playerModal(replCtx.key, replCtx.team, replCtx.name);
   const cp = e.target.closest("[data-copy]"); if (cp) copyCred(cp);
+  const en = e.target.closest("[data-enter]"); if (en) enterAs(en);
+  if (e.target.closest("#backAdm")) backToAdmin();
   const ms = e.target.closest("[data-ms]"); if (ms) matchAction(ms.dataset.ms);
   const ga = e.target.closest("[data-gadd]"); if (ga) goalAdd();
   const gd = e.target.closest("[data-gdel]"); if (gd) goalDel(gd.dataset.gdel);
@@ -1010,6 +1012,8 @@ function applyRole() {
   if (id && state.fav !== id) { state.fav = id; save(); applyAccent(); renderHome(); }
   // вкладка «Доступы» видна только создателю
   const nb = $("#navAccess"); if (nb) nb.style.display = adm ? "" : "none";
+  if (adm) asCoach = false;
+  const back = $("#backAdm"); if (back) back.style.display = asCoach && id ? "" : "none";
   applyLogo();
   renderTicker();
   if (!adm && $("#access").classList.contains("on")) go("home");
@@ -1032,7 +1036,7 @@ function renderAccess() {
   const rows = Object.values(CREDS).sort((a, b) => String(a.club || a.login).localeCompare(String(b.club || b.login), "ru"));
   $("#accessBody").innerHTML = rows.length
     ? `<div class="tw"><table><tr><th class="l">Клуб — тренер</th><th class="l">Логин</th><th class="l">Пароль</th><th></th></tr>${rows.map(r =>
-        `<tr><td class="l">${esc(r.note || r.club || "")}</td><td class="l"><code>${esc(r.login)}</code></td><td class="l"><code>${esc(r.password)}</code></td><td><button class="btn ghost sm" data-copy="${esc(r.login)} ${esc(r.password)}">Копировать</button></td></tr>`).join("")}</table></div>`
+        `<tr><td class="l">${esc(r.note || r.club || "")}</td><td class="l"><code>${esc(r.login)}</code></td><td class="l"><code>${esc(r.password)}</code></td><td class="act"><button class="btn sm" data-enter="${esc(r.login)}" data-pw="${esc(r.password)}">Зайти</button> <button class="btn ghost sm" data-copy="${esc(r.login)} ${esc(r.password)}">Копировать</button></td></tr>`).join("")}</table></div>`
     : `<p class="hint">Список пуст. Откройте setup.html один раз — он сохранит логины и пароли сюда.</p>`;
 }
 function copyCred(el) {
@@ -1059,6 +1063,25 @@ function coachLoginModal(msg = "") {
     <button class="btn big ghost" type="button" id="coachBack">Назад</button>
   </form>`, true);
 }
+// ---------- Мгновенный вход создателя в аккаунт тренера ----------
+let adminPw = null, asCoach = false;   // asCoach — создатель сейчас сидит под тренером
+async function enterAs(btn) {
+  if (!isAdmin()) return;
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "Входим…";
+  const err = await coachLogin(btn.dataset.enter, btn.dataset.pw);
+  btn.disabled = false;
+  if (err) { btn.textContent = old; alert(err); return; }
+  asCoach = true;
+  applyRole(); watchCreds(); renderAll(); go("home");
+}
+async function backToAdmin() {
+  if (adminPw) {
+    const err = await coachLogin(ADMIN_LOGIN, adminPw);
+    if (!err) { asCoach = false; applyRole(); watchCreds(); renderAll(); return; }
+  }
+  coachLoginModal("Введите пароль создателя, чтобы вернуться");
+  const l = $("#cLogin"); if (l) { l.value = ADMIN_LOGIN; const pw = $("#cPass"); if (pw) pw.focus(); }
+}
 async function coachLogin(login, pw) {
   const l = login.trim().toLowerCase(), id = l.split("_")[0];
   if (!l || !pw) return "Введите логин и пароль";
@@ -1067,6 +1090,7 @@ async function coachLogin(login, pw) {
   if (!T(id) && l !== ADMIN_LOGIN) return "Неверный логин или пароль";
   try { await Backend.auth.signInWithEmailAndPassword(`${l}@${COACH_DOMAIN}`, pw); }
   catch (e) { return e.code === "auth/network-request-failed" ? "Нет связи с сервером. Проверьте интернет." : e.code === "auth/too-many-requests" ? "Слишком много попыток. Подождите и попробуйте снова." : "Неверный логин или пароль"; }
+  if (l === ADMIN_LOGIN) adminPw = pw;   // только в памяти страницы, на диск не пишется
   state.role = "coach"; if (T(id)) state.fav = id; else if (state.fav === undefined) state.fav = null; save();
   return null;
 }
@@ -1076,7 +1100,7 @@ document.addEventListener("submit", async e => {
   const btn = $("#cGo"); btn.disabled = true; btn.textContent = "Входим…";
   const err = await coachLogin($("#cLogin").value, $("#cPass").value);
   if (err) { $("#cErr").textContent = err; btn.disabled = false; btn.textContent = "Войти"; return; }
-  applyRole(); watchCreds(); renderAll(); closeModal();
+  asCoach = false; applyRole(); watchCreds(); renderAll(); closeModal();
 });
 
 // ---------- Состав: просмотр (в стиле карточки матча КХЛ) ----------

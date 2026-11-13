@@ -432,3 +432,8 @@ button.gplay.yt { background: #c4302b; }
 .set .vol { margin-top: 10px; }
 .set .vol input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .set .vol span { min-width: 40px; text-align: right; }
+
+/* «Зайти» в доступах создателя */
+td.act { white-space: nowrap; }
+td.act .btn { margin-right: 4px; }
+#backAdm { cursor: pointer; color: var(--text); font: inherit; font-size: 13px; }
