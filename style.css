@@ -424,3 +424,11 @@ button.gplay.yt { background: #c4302b; }
 .xpick small, .rpick small { color: var(--muted); font-size: 12px; text-align: right; }
 .rpick:disabled { opacity: .45; }
 .hint.note { color: var(--accent); }
+
+/* эмблема клуба тренера */
+.brand img.teamLogo { border-radius: 0; }
+.heroLogo.teamLogo { box-shadow: none; filter: drop-shadow(0 8px 28px rgba(0,0,0,.6)); border-radius: 0; }
+/* громкость музыки в настройках */
+.set .vol { margin-top: 10px; }
+.set .vol input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.set .vol span { min-width: 40px; text-align: right; }

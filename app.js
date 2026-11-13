@@ -340,6 +340,8 @@ function settingsModal() {
   openModal(`<h3>Настройки</h3>
     <div class="set">${fav ? "Любимый клуб: <b>" + fav.name + "</b>" : "Любимый клуб не выбран"}${locked ? `<br><small class="muted">Закреплён за вашей командой</small>` : `<br><button class="btn" id="chg">Изменить</button>`}</div>
     <div class="set"><label><input type="checkbox" id="colorOn" ${state.color !== false ? "checked" : ""}> Цвет команды — перекрасить акценты сайта в цвет клуба</label></div>
+    <div class="set"><label><input type="checkbox" id="musicOn" ${musicOn() ? "checked" : ""}> 🎵 Фоновая музыка</label>
+      <label class="vol">Громкость <input type="range" id="musicVol" min="0" max="100" value="${Math.round(musicVol() * 100)}"><span id="musicVolV">${Math.round(musicVol() * 100)}%</span></label></div>
     <div class="set links"><div class="hint">Мы в соцсетях</div>${LEAGUE.socials.map(s => `<a href="${s.u}" target="_blank" rel="noopener">${s.t}</a>`).join("")}</div>
     <div class="set">${isAdmin() ? "Вы вошли как <b>создатель лиги</b>" : coachTeam() ? "Вы вошли как тренер: <b>" + T(coachTeam()).name + "</b>" : "Вы заходите как болельщик"}<br><button class="btn ghost" id="roleBtn">${coachTeam() || isAdmin() ? "Выйти" : "Сменить роль"}</button></div>
     <div class="set"><div class="hint">Сброс — вернуть все настройки по умолчанию</div><button class="btn ghost" id="reset">Сбросить всё</button></div>`);
@@ -1008,6 +1010,7 @@ function applyRole() {
   if (id && state.fav !== id) { state.fav = id; save(); applyAccent(); renderHome(); }
   // вкладка «Доступы» видна только создателю
   const nb = $("#navAccess"); if (nb) nb.style.display = adm ? "" : "none";
+  applyLogo();
   renderTicker();
   if (!adm && $("#access").classList.contains("on")) go("home");
 }
@@ -1338,9 +1341,59 @@ async function replaceApply(i) {
   } catch (e) { alert("Не удалось заменить. Проверьте интернет и что вы вошли как тренер этой команды."); }
 }
 
+// ---------- Эмблема клуба тренера ----------
+// Тренер видит эмблему своего клуба везде вместо логотипа лиги; остальные — логотип лиги.
+function logoSrc() {
+  const id = coachTeam();
+  return id ? `${LOGO_DIR}${id}.png` : (typeof LEAGUE_LOGO !== "undefined" ? LEAGUE_LOGO : "");
+}
+function applyLogo() {
+  const src = logoSrc(), team = !!coachTeam();
+  document.querySelectorAll("img[data-logo]").forEach(i => {
+    i.onerror = () => { i.onerror = null; if (typeof LEAGUE_LOGO !== "undefined") i.src = LEAGUE_LOGO; };
+    if (i.getAttribute("src") !== src) i.src = src;
+    i.classList.toggle("teamLogo", team);
+    if (team) i.alt = T(coachTeam()).name;
+  });
+  const fav = document.querySelector("link[rel=icon]");
+  if (fav) { if (!fav.dataset.orig) fav.dataset.orig = fav.href; fav.href = team ? src : fav.dataset.orig; }
+}
+
+// ---------- Фоновая музыка ----------
+// Играет по кругу без пауз. Браузеры запрещают автозвук, поэтому стартуем с первого касания.
+const musicOn = () => !state.music || state.music.on !== false;
+const musicVol = () => state.music && typeof state.music.vol === "number" ? state.music.vol : 0.35;
+const bgm = new Audio("music.mp3");
+bgm.loop = true; bgm.preload = "auto"; bgm.volume = musicVol();
+let bgmHold = 0;   // >0 — музыка временно на паузе (идёт видео гола)
+function musicSync() {
+  bgm.volume = musicVol();
+  if (musicOn() && !bgmHold && !document.hidden) { const p = bgm.play(); if (p && p.catch) p.catch(() => {}); }
+  else bgm.pause();
+}
+function musicSet(patch) { state.music = { on: musicOn(), vol: musicVol(), ...patch }; save(); musicSync(); }
+["pointerdown", "keydown", "touchend"].forEach(ev => document.addEventListener(ev, function once() {
+  if (!bgm.paused) return;
+  musicSync();
+  if (!bgm.paused) ["pointerdown", "keydown", "touchend"].forEach(e2 => document.removeEventListener(e2, once, true));
+}, true));
+document.addEventListener("visibilitychange", musicSync);
+// пока играет видео гола — музыку ставим на паузу
+document.addEventListener("play", e => { if (e.target instanceof HTMLVideoElement) { bgmHold++; musicSync(); } }, true);
+const vidDone = e => { if (e.target instanceof HTMLVideoElement && bgmHold) { bgmHold--; musicSync(); } };
+document.addEventListener("pause", vidDone, true); document.addEventListener("ended", vidDone, true);
+document.addEventListener("change", e => { if (e.target.id === "musicOn") musicSet({ on: e.target.checked }); });
+document.addEventListener("input", e => {
+  if (e.target.id !== "musicVol") return;
+  const v = +e.target.value / 100; $("#musicVolV").textContent = Math.round(v * 100) + "%";
+  musicSet({ vol: v });
+});
+musicSync();
+
 // ---------- Запуск ----------
 LU = withPresets(LU);
 renderAll();
+applyLogo();
 Backend.init = initBackend();
 (async () => {
   if (state.role === "coach") {            // ждём ответ Firebase: он решит, вошёл ли тренер
