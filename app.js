@@ -211,6 +211,7 @@ function renderSchedule() {
     return;
   }
   bar.style.display = "";
+  const fb = $("#fillBtn"); if (fb) fb.style.display = isAdmin() ? "" : "none";
   const n = tourCount();
   if (ui.tour === null) {
     const open = regular().find(m => m.hs === null || m.live);
@@ -1364,6 +1365,83 @@ async function replaceApply(i) {
     replCtx = null; matchModal(key);
   } catch (e) { alert("Не удалось заменить. Проверьте интернет и что вы вошли как тренер этой команды."); }
 }
+
+// ---------- Создатель: заполнить составы тура ----------
+// Берём для каждой выбранной команды состав из её прошлого матча (или заготовку из data.js)
+// и сохраняем как состав на матч выбранного тура. Уже сохранённые составы не трогаем.
+let fillSel = new Set(), fillQ = "";
+function fillRows(tour) {
+  const rows = [];
+  regular().filter(m => m.tour === tour).forEach(m => [m.home, m.away].forEach(id => {
+    const t = T(id); if (!t) return;
+    const key = matchKey(m), ex = LU[`${key}__${id}`];
+    let st, src = null;
+    if (ex && !ex.preset) st = "saved";
+    else { src = (ex && (ex.players || []).length) ? ex : prevLineups(m, id)[0] || null; st = src ? "ready" : "none"; }
+    const opp = T(id === m.home ? m.away : m.home);
+    rows.push({ id, t, m, key, st, src, opp });
+  }));
+  return rows.sort((a, b) => a.t.name.localeCompare(b.t.name, "ru"));
+}
+const FILL_ST = { saved: "✓ уже заполнен", ready: "можно заполнить", none: "нет данных для переноса" };
+function fillListHtml() {
+  const q = qn(fillQ), rows = fillRows(ui.tour).filter(r => !q || qn(r.t.name).includes(q) || qn(r.t.short).includes(q) || qn(r.id).includes(q));
+  if (!rows.length) return `<p class="hint">Команды не найдены</p>`;
+  return rows.map(r => `<label class="frow${r.st === "ready" ? "" : " off"}">
+    <input type="checkbox" data-fsel="${esc(r.id)}" ${r.st !== "ready" ? "disabled" : ""} ${fillSel.has(r.id) && r.st === "ready" ? "checked" : ""}>
+    ${badge(r.t)}<span class="fn"><b>${esc(r.t.name)}</b><small>против ${esc(r.opp ? r.opp.short || r.opp.name : "—")} · ${FILL_ST[r.st]}${r.st === "ready" && r.src ? (r.src.tour < r.m.tour ? " · из тура " + r.src.tour : " · заготовка") : ""}</small></span></label>`).join("");
+}
+function fillCount() {
+  const ready = new Set(fillRows(ui.tour).filter(r => r.st === "ready").map(r => r.id));
+  const k = [...fillSel].filter(id => ready.has(id)).length;
+  const b = $("#fillGo"); if (b) { b.textContent = `Заполнить выбранные (${k})`; b.disabled = !k; }
+  const a = $("#fillAll"); if (a) { a.textContent = `Заполнить все (${ready.size})`; a.disabled = !ready.size; }
+}
+function fillModal() {
+  if (!isAdmin() || ui.schStage !== "regular") return;
+  fillSel = new Set(); fillQ = "";
+  openModal(`<h3>Заполнить составы · Тур ${ui.tour}</h3>
+    <p class="hint">Состав берётся из прошлого матча команды и сохраняется на матч этого тура. Уже заполненные составы не перезаписываются.</p>
+    <input class="inp" id="fillQ" type="search" placeholder="Поиск команды" autocomplete="off">
+    <div id="fillList" class="flist">${fillListHtml()}</div>
+    <div class="err" id="fillMsg"></div>
+    <div class="fbtns"><button class="btn" id="fillGo" type="button" disabled>Заполнить выбранные (0)</button>
+    <button class="btn ghost" id="fillAll" type="button">Заполнить все</button></div>`);
+  fillCount();
+}
+async function fillRun(all) {
+  if (!isAdmin() || !Backend.db) return;
+  const rows = fillRows(ui.tour).filter(r => r.st === "ready" && (all || fillSel.has(r.id)));
+  if (!rows.length) return;
+  const msg = $("#fillMsg"), go = $("#fillGo"), al = $("#fillAll");
+  go.disabled = al.disabled = true; msg.className = "hint"; msg.textContent = "Сохраняем…";
+  try {
+    const batch = Backend.db.batch();
+    rows.forEach(r => batch.set(Backend.db.collection("lineups").doc(`${r.key}__${r.id}`), {
+      team: r.id, match: r.key, tour: r.m.tour, home: r.m.home, away: r.m.away,
+      players: r.src.players.map(p => ({ ...p })),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(), by: Backend.user.email
+    }));
+    await batch.commit();
+    rows.forEach(r => { LU[`${r.key}__${r.id}`] = { team: r.id, match: r.key, tour: r.m.tour, home: r.m.home, away: r.m.away, players: r.src.players.map(p => ({ ...p })) }; });
+    fillSel = new Set(); renderSchedule();
+    $("#fillList").innerHTML = fillListHtml(); fillCount();
+    msg.className = "hint"; msg.textContent = `Готово: заполнено составов — ${rows.length}`;
+  } catch (e) {
+    msg.className = "err"; msg.textContent = "Не удалось сохранить. Проверьте интернет и что вы вошли как создатель.";
+    fillCount();
+  }
+}
+document.addEventListener("click", e => {
+  if (e.target.closest("#fillBtn")) fillModal();
+  else if (e.target.closest("#fillGo")) fillRun(false);
+  else if (e.target.closest("#fillAll")) fillRun(true);
+});
+document.addEventListener("input", e => { if (e.target.id === "fillQ") { fillQ = e.target.value; $("#fillList").innerHTML = fillListHtml(); fillCount(); } });
+document.addEventListener("change", e => {
+  const c = e.target.closest && e.target.closest("[data-fsel]"); if (!c) return;
+  c.checked ? fillSel.add(c.dataset.fsel) : fillSel.delete(c.dataset.fsel); fillCount();
+});
 
 // ---------- Эмблема клуба тренера ----------
 // Тренер видит эмблему своего клуба везде вместо логотипа лиги; остальные — логотип лиги.
