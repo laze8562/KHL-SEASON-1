@@ -165,7 +165,8 @@ function lgSyncGames(snap) {
   for (let i = MATCHES.length - 1; i >= 0; i--) if (MATCHES[i].dyn) MATCHES.splice(i, 1);
   snap.forEach(d => {
     const g = d.data();
-    MATCHES.push({ ...g, key: g.key || d.id, dyn: true, label: "", hs: null, as: null, ot: false });
+    // подпись пересчитываем, чтобы у матчей, созданных до переименования раундов, она тоже была верной
+    MATCHES.push({ ...g, key: g.key || d.id, dyn: true, label: "", hs: null, as: null, ot: false, ...(g.stage === "playoff" && g.round !== undefined ? { tag: poTag(g) } : {}) });
   });
   applyLive();
 }
@@ -192,13 +193,14 @@ function lgDeleteGamesOps(keys) {
 const poGames = () => MATCHES.filter(m => m.stage === "playoff");
 const poHas = () => poGames().length > 0;
 
+const poTag = g => `${PO_NAMES[g.round]}${g.conf ? " · " + CONF[g.conf] : ""} · Игра ${g.gn}`;
 function poGameDoc(o) {
   const home = o.home || (PO_HOME_A[o.gn - 1] ? o.a : o.b), away = home === o.a ? o.b : o.a;
   return {
     key: `p${o.round}${o.conf ? o.conf[0] : "f"}${o.slot}g${o.gn}`, stage: "playoff",
     round: o.round, conf: o.conf || null, slot: o.slot, gn: o.gn, a: o.a, b: o.b, sa: o.sa || null, sb: o.sb || null,
     home, away, tour: 60 + o.round * 10 + o.gn,
-    tag: `${PO_NAMES[o.round]}${o.conf ? " · " + CONF[o.conf] : ""} · Игра ${o.gn}`
+    tag: poTag(o)
   };
 }
 // Серии: игры группируются по раунду, конференции и номеру серии; победы считаются по сыгранным матчам.
@@ -247,13 +249,8 @@ function poBuild(games) {
 // ---------- Кнопки плей-офф в расписании ----------
 function poToolsHtml() {
   if (!isAdmin()) return "";
-  return `<div class="box adm"><h3>Плей-офф: управление</h3>
-    <p class="hint">Плей-офф начинается с 1/8 финала. «Сделать расписание матчей» составляет пары по итоговой таблице сезона (1–8, 2–7, 3–6, 4–5 в каждой конференции), затем добавляет следующие игры серий (до 4 побед) и новые раунды. «Заполнить составы» переносит составы команд из их прошлых матчей. «Провести игры» сыграет все запланированные матчи и сразу запланирует следующие. Один матч можно сыграть из его карточки, а любой матч — создать вручную.</p>
-    <button class="btn" data-po="build" type="button">📅 Сделать расписание матчей</button>
-    <button class="btn" data-po="fill" type="button">📝 Заполнить составы</button>
-    <button class="btn" data-po="sim" type="button">🎲 Провести игры</button>
-    <button class="btn ghost" data-po="add" type="button">➕ Создать матч</button>
-    ${poHas() ? `<button class="btn ghost" data-po="clear" type="button">🗑 Очистить плей-офф</button>` : ""}</div>`;
+  const b = (a, t) => `<button class="fillBtn" data-po="${a}" type="button">${t}</button>`;
+  return `<div class="tourbar poBar">${b("build", "📅 Сделать расписание матчей")}${b("fill", "📝 Заполнить составы")}${b("sim", "🎲 Провести игры")}${b("add", "➕ Создать матч")}${poHas() ? b("clear", "🗑 Очистить плей-офф") : ""}</div>`;
 }
 // строка со счётом серии над матчами: «Лада 1:0 Спартак»
 const poSerHead = s => `<div class="serHead${s.done ? " end" : ""}"><span>${esc(T(s.a).name)}</span><b>${s.wa}:${s.wb}</b><span>${esc(T(s.b).name)}</span>${s.done ? `<small>серия окончена</small>` : ""}</div>`;
