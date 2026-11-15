@@ -238,7 +238,7 @@ function renderTable() {
   if (poHas()) { el.innerHTML = poBracketHtml(); return; }   // сетка собирается из матчей плей-офф
   const seeded = typeof PLAYOFF_SEEDS !== "undefined" && ["west", "east"].some(c => (PLAYOFF_SEEDS[c] || []).length === 8);
   if (!seeded) { el.innerHTML = `<p class="hint" style="margin-top:18px">Сетка плей-офф появится после завершения регулярного чемпионата.</p>`; return; }
-  const names = ["1/4 финала", "1/2 финала", "Финал конф."];
+  const names = ["1/8 финала", "1/4 финала", "1/2 финала"];
   const bw = bracket("west"), be = bracket("east");
   const fin = PLAYOFF.final || {}, fa = fin.a || 0, fb = fin.b || 0;
   const finS = { a: bw.champ, b: be.champ, sa: fa, sb: fb, w: fa >= 4 ? bw.champ : fb >= 4 ? be.champ : null };
@@ -563,7 +563,7 @@ function goalsAdmin(m, d) {
 // панель управления матчем (только создатель)
 function adminPanel(key, m) {
   const d = LM[key], H = T(m.home), A = T(m.away);
-  if (!isStarted(d)) return `<div class="box adm"><h3>Управление матчем</h3><button class="btn big" data-ms="start">▶ Начать матч</button></div>`;
+  if (!isStarted(d)) return `<div class="box adm"><h3>Управление матчем</h3><button class="btn big" data-ms="start">▶ Начать матч</button>${d && (d.goals || []).length ? "" : `<button class="btn big ghost" data-sim1="1" type="button">🎲 Сыграть матч (симуляция)</button>`}</div>`;
   const row = (t, p, mi, pl) => `<div class="srow"><span>${esc(t.short || t.name)}</span><button class="btn ghost" data-ms="${mi}" type="button">−</button><b>${p}</b><button class="btn" data-ms="${pl}" type="button">+</button></div>`;
   if (d.status === "live") return `<div class="box adm"><h3>Матч идёт</h3>
     <p class="hint">Период выбирайте кружками под счётом (1, 2, 3, ОТ, Б). Голы «+» записываются в выбранный период.</p>
@@ -1165,7 +1165,7 @@ function matchModal(key) {
   const d = LM[key], started = isStarted(d);
   const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small>${started ? periodsHtml(d, isAdmin() && d.status === "live") : ""}</div>`;
   const goals = goalsHtml(d, isAdmin());
-  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">${m.tag ? esc(m.tag) : "Тур " + m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${canClick ? `<p class="hint">Нажмите на игрока в составе, чтобы заменить его на похожего.</p>` : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
+  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">${m.tag ? esc(m.tag) : "Тур " + m.tour}${m.label ? " · " + esc(m.label) : ""}${m.stage === "playoff" && poSerOf(m) ? ` · счёт в серии ${poSerOf(m).wa}:${poSerOf(m).wb} (${esc(T(poSerOf(m).a).short)} — ${esc(T(poSerOf(m).b).short)})` : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${canClick ? `<p class="hint">Нажмите на игрока в составе, чтобы заменить его на похожего.</p>` : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 
@@ -1381,9 +1381,17 @@ async function replaceApply(i) {
 // Берём для каждой выбранной команды состав из её прошлого матча (или заготовку из data.js)
 // и сохраняем как состав на матч выбранного тура. Уже сохранённые составы не трогаем.
 let fillSel = new Set(), fillQ = "";
-function fillRows(tour) {
+// какие матчи заполняем: тур регулярки или несыгранные игры плей-офф
+const fillMatches = () => ui.schStage === "playoff" ? poGames().filter(m => !lgDone(m)) : regular().filter(m => m.tour === ui.tour);
+// откуда взят состав: «из тура 3» или «из игры плей-офф»
+const fillFrom = (src, m) => {
+  if (src.tour >= m.tour) return " · заготовка";
+  const pm = MATCHES.find(x => matchKey(x) === src.match);
+  return pm && pm.tag ? " · из прошлой игры плей-офф" : " · из тура " + src.tour;
+};
+function fillRows() {
   const rows = [];
-  regular().filter(m => m.tour === tour).forEach(m => [m.home, m.away].forEach(id => {
+  fillMatches().forEach(m => [m.home, m.away].forEach(id => {
     const t = T(id); if (!t) return;
     const key = matchKey(m), ex = LU[`${key}__${id}`];
     let st, src = null;
@@ -1396,23 +1404,24 @@ function fillRows(tour) {
 }
 const FILL_ST = { saved: "✓ уже заполнен", ready: "можно заполнить", none: "нет данных для переноса" };
 function fillListHtml() {
-  const q = qn(fillQ), rows = fillRows(ui.tour).filter(r => !q || qn(r.t.name).includes(q) || qn(r.t.short).includes(q) || qn(r.id).includes(q));
+  const q = qn(fillQ), rows = fillRows().filter(r => !q || qn(r.t.name).includes(q) || qn(r.t.short).includes(q) || qn(r.id).includes(q));
   if (!rows.length) return `<p class="hint">Команды не найдены</p>`;
   return rows.map(r => `<label class="frow${r.st === "ready" ? "" : " off"}">
     <input type="checkbox" data-fsel="${esc(r.id)}" ${r.st !== "ready" ? "disabled" : ""} ${fillSel.has(r.id) && r.st === "ready" ? "checked" : ""}>
-    ${badge(r.t)}<span class="fn"><b>${esc(r.t.name)}</b><small>против ${esc(r.opp ? r.opp.short || r.opp.name : "—")} · ${FILL_ST[r.st]}${r.st === "ready" && r.src ? (r.src.tour < r.m.tour ? " · из тура " + r.src.tour : " · заготовка") : ""}</small></span></label>`).join("");
+    ${badge(r.t)}<span class="fn"><b>${esc(r.t.name)}</b><small>против ${esc(r.opp ? r.opp.short || r.opp.name : "—")} · ${FILL_ST[r.st]}${r.st === "ready" && r.src ? fillFrom(r.src, r.m) : ""}</small></span></label>`).join("");
 }
 function fillCount() {
-  const ready = new Set(fillRows(ui.tour).filter(r => r.st === "ready").map(r => r.id));
+  const ready = new Set(fillRows().filter(r => r.st === "ready").map(r => r.id));
   const k = [...fillSel].filter(id => ready.has(id)).length;
   const b = $("#fillGo"); if (b) { b.textContent = `Заполнить выбранные (${k})`; b.disabled = !k; }
   const a = $("#fillAll"); if (a) { a.textContent = `Заполнить все (${ready.size})`; a.disabled = !ready.size; }
 }
 function fillModal() {
-  if (!isAdmin() || ui.schStage !== "regular") return;
+  if (!isAdmin()) return;
   fillSel = new Set(); fillQ = "";
-  openModal(`<h3>Заполнить составы · Тур ${ui.tour}</h3>
-    <p class="hint">Состав берётся из прошлого матча команды и сохраняется на матч этого тура. Уже заполненные составы не перезаписываются.</p>
+  const po = ui.schStage === "playoff";
+  openModal(`<h3>Заполнить составы · ${po ? "Плей-офф" : "Тур " + ui.tour}</h3>
+    <p class="hint">Состав берётся из прошлого матча команды и сохраняется на ${po ? "её ближайшую игру плей-офф" : "матч этого тура"}. Уже заполненные составы не перезаписываются.</p>
     <input class="inp" id="fillQ" type="search" placeholder="Поиск команды" autocomplete="off">
     <div id="fillList" class="flist">${fillListHtml()}</div>
     <div class="err" id="fillMsg"></div>
@@ -1422,7 +1431,7 @@ function fillModal() {
 }
 async function fillRun(all) {
   if (!isAdmin() || !Backend.db) return;
-  const rows = fillRows(ui.tour).filter(r => r.st === "ready" && (all || fillSel.has(r.id)));
+  const rows = fillRows().filter(r => r.st === "ready" && (all || fillSel.has(r.id)));
   if (!rows.length) return;
   const msg = $("#fillMsg"), go = $("#fillGo"), al = $("#fillAll");
   go.disabled = al.disabled = true; msg.className = "hint"; msg.textContent = "Сохраняем…";
