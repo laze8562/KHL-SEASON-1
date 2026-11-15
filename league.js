@@ -6,7 +6,7 @@
 //  когда страница уже собрана, поэтому app.js и data.js здесь доступны.
 // ======================================================================
 const LG = { rnd: Math.random, busy: false };
-const PO_NAMES = ["1/4 финала", "1/2 финала", "Финал конференции", "Финал КХЛ"];
+const PO_NAMES = ["1/8 финала", "1/4 финала", "1/2 финала", "Финал КХЛ"];   // 16 клубов: по 8 от каждой конференции
 const PO_HOME_A = [1, 1, 0, 0, 1, 0, 1];   // схема 2-2-1-1-1: в каких играх серии хозяин — верхний посев
 let TN = {};   // турниры: { id: { name, teams, circles, groups:[{name, teams}], order } }
 
@@ -130,6 +130,24 @@ async function lgSimRun(list, opt = {}) {
 }
 const lgSummary = r => `Сыграно матчей: ${r.n}` + (r.skipped ? ` (пропущено: ${r.skipped} — уже сыграны или идут)` : "");
 
+// ---------- Кнопка «Сыграть матч» в карточке одного матча ----------
+async function lgSimOne() {
+  if (!lgCan() || !currentMatch) return;
+  const key = currentMatch, m = MATCHES.find(x => matchKey(x) === key); if (!m) return;
+  if (!lgUnplayed(m)) { lgToast("Этот матч уже сыгран, идёт или в нём внесены голы"); return; }
+  await lgGuard(async () => {
+    const r = await lgSimRun([m], { playoff: m.stage === "playoff" }), s = r.res[key];
+    let extra = "";
+    if (s && m.stage === "playoff") {   // как и при общей симуляции: сразу планируем следующие игры серии и раунды
+      const merged = poGames().map(g => matchKey(g) === key ? { ...g, hs: s.hs, as: s.as, live: false } : g);
+      const next = poBuild(merged);
+      if (next.out.length) { await lgGamesWrite(next.out); extra = `. Запланировано новых игр: ${next.out.length}`; }
+      else if (next.msg) extra = ". " + next.msg;
+    }
+    if (s) lgToast(`${T(m.home).name} ${s.hs}:${s.as} ${T(m.away).name}${extra}`);
+  });
+}
+
 // ---------- Кнопка «Провести игры» в расписании (регулярный чемпионат) ----------
 async function lgSimTour() {
   if (!lgCan()) return;
@@ -230,8 +248,9 @@ function poBuild(games) {
 function poToolsHtml() {
   if (!isAdmin()) return "";
   return `<div class="box adm"><h3>Плей-офф: управление</h3>
-    <p class="hint">«Сделать расписание матчей» составляет сетку по турнирной таблице (1–8, 4–5, 2–7, 3–6), затем добавляет следующие игры серий (до 4 побед) и новые раунды. «Провести игры» сыграет все запланированные матчи и сразу запланирует следующие. Любой матч можно создать и вручную.</p>
+    <p class="hint">Плей-офф начинается с 1/8 финала. «Сделать расписание матчей» составляет пары по итоговой таблице сезона (1–8, 2–7, 3–6, 4–5 в каждой конференции), затем добавляет следующие игры серий (до 4 побед) и новые раунды. «Заполнить составы» переносит составы команд из их прошлых матчей. «Провести игры» сыграет все запланированные матчи и сразу запланирует следующие. Один матч можно сыграть из его карточки, а любой матч — создать вручную.</p>
     <button class="btn" data-po="build" type="button">📅 Сделать расписание матчей</button>
+    <button class="btn" data-po="fill" type="button">📝 Заполнить составы</button>
     <button class="btn" data-po="sim" type="button">🎲 Провести игры</button>
     <button class="btn ghost" data-po="add" type="button">➕ Создать матч</button>
     ${poHas() ? `<button class="btn ghost" data-po="clear" type="button">🗑 Очистить плей-офф</button>` : ""}</div>`;
@@ -311,7 +330,7 @@ async function poAddGo() {
 
 // ---------- Сетка плей-офф: строится сама по матчам ----------
 function poBracketHtml() {
-  const series = poSeries(poGames()), names = ["1/4 финала", "1/2 финала", "Финал конф."], cap = [4, 2, 1];
+  const series = poSeries(poGames()), names = ["1/8 финала", "1/4 финала", "1/2 финала"], cap = [4, 2, 1];
   const ser = s => s ? { a: s.a, b: s.b, sa: s.wa, sb: s.wb, w: s.winner } : { a: null, b: null, sa: 0, sb: 0, w: null };
   const col = conf => `<div class="box"><h3>${CONF[conf]}</h3><div class="bracket">${[0, 1, 2].map(r => `<div class="round"><h4>${names[r]}</h4>${Array.from({ length: cap[r] }, (_, i) => serHtml(ser(series.find(s => s.round === r && s.conf === conf && s.slot === i)))).join("")}</div>`).join("")}</div></div>`;
   const fin = series.find(s => s.round === 3);
@@ -542,7 +561,7 @@ async function tnDelete() {
 document.addEventListener("click", e => {
   const tw = e.target.closest("[data-tw]"); if (tw && !tw.disabled) twAct(tw.dataset.tw);
   const po = e.target.closest("[data-po]");
-  if (po) { const a = po.dataset.po; if (a === "build") poBuildRun(); else if (a === "sim") poSimRun(); else if (a === "add") poAddModal(); else if (a === "addgo") poAddGo(); else if (a === "clear") poClear(); }
+  if (po) { const a = po.dataset.po; if (a === "build") poBuildRun(); else if (a === "sim") poSimRun(); else if (a === "add") poAddModal(); else if (a === "addgo") poAddGo(); else if (a === "fill") fillModal(); else if (a === "clear") poClear(); }
   const op = e.target.closest("[data-tn-open]"); if (op) { ui.tid = op.dataset.tnOpen; ui.ttab = "table"; ui.ttour = 0; renderTournaments(); window.scrollTo(0, 0); }
   const tb = e.target.closest("[data-tn-tab]"); if (tb) { ui.ttab = tb.dataset.tnTab; renderTournaments(); }
   const tn = e.target.closest("[data-tn]");
@@ -557,6 +576,7 @@ document.addEventListener("click", e => {
     else if (a === "del") tnDelete();
   }
   if (e.target.closest("#simBtn")) lgSimTour();
+  if (e.target.closest("[data-sim1]")) lgSimOne();
 });
 document.addEventListener("change", e => {
   const t = e.target;
