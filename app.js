@@ -1165,7 +1165,7 @@ function matchModal(key) {
   const d = LM[key], started = isStarted(d);
   const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small>${started ? periodsHtml(d, isAdmin() && d.status === "live") : ""}</div>`;
   const goals = goalsHtml(d, isAdmin());
-  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">${m.tag ? esc(m.tag) : "Тур " + m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${canClick ? `<p class="hint">Нажмите на игрока в составе, чтобы заменить его на похожего.</p>` : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
+  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">${m.tag ? esc(m.tag) : "Тур " + m.tour}${m.label ? " · " + esc(m.label) : ""}${m.stage === "playoff" && poSerOf(m) ? ` · счёт в серии ${poSerOf(m).wa}:${poSerOf(m).wb} (${esc(T(poSerOf(m).a).short)} — ${esc(T(poSerOf(m).b).short)})` : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${canClick ? `<p class="hint">Нажмите на игрока в составе, чтобы заменить его на похожего.</p>` : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 

@@ -468,3 +468,9 @@ body.lgbusy .btn, body.lgbusy .fillBtn { opacity: .6; pointer-events: none; }
 .twg { padding: 8px 0; border-bottom: 1px solid var(--line); }
 .twg .chip { margin: 4px 4px 0 0; }
 .btn:disabled { opacity: .45; cursor: default; }
+.serHead { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 14px 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font-size: 15px; }
+.serHead span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.serHead span:first-child { text-align: right; }
+.serHead b { color: var(--accent); font-size: 20px; letter-spacing: .04em; }
+.serHead.end { border-color: var(--accent); }
+.serHead small { color: var(--muted); font-size: 12px; white-space: nowrap; }

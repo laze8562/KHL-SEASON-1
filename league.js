@@ -255,13 +255,20 @@ function poToolsHtml() {
     <button class="btn ghost" data-po="add" type="button">➕ Создать матч</button>
     ${poHas() ? `<button class="btn ghost" data-po="clear" type="button">🗑 Очистить плей-офф</button>` : ""}</div>`;
 }
+// строка со счётом серии над матчами: «Лада 1:0 Спартак»
+const poSerHead = s => `<div class="serHead${s.done ? " end" : ""}"><span>${esc(T(s.a).name)}</span><b>${s.wa}:${s.wb}</b><span>${esc(T(s.b).name)}</span>${s.done ? `<small>серия окончена</small>` : ""}</div>`;
 function poListHtml() {
-  const l = poGames().sort((x, y) => (x.round - y.round) || String(x.conf).localeCompare(String(y.conf)) || (x.slot - y.slot) || (x.gn - y.gn));
-  if (!l.length) return `<p class="hint">Матчей плей-офф пока нет</p>`;
+  const ser = poSeries(poGames()).sort((x, y) => (x.round - y.round) || String(x.conf).localeCompare(String(y.conf)) || (x.slot - y.slot));
+  if (!ser.length) return `<p class="hint">Матчей плей-офф пока нет</p>`;
   let html = "", r = -1;
-  l.forEach(m => { if (m.round !== r) { r = m.round; html += `<h4 class="ph">${PO_NAMES[r]}</h4>`; } html += matchHtml(m); });
+  ser.forEach(s => {
+    if (s.round !== r) { r = s.round; html += `<h4 class="ph">${PO_NAMES[r]}</h4>`; }
+    html += poSerHead(s) + s.games.map(matchHtml).join("");
+  });
   return html;
 }
+// счёт серии для окна матча
+const poSerOf = m => poSeries(poGames()).find(s => s.games.some(g => matchKey(g) === matchKey(m)));
 async function poBuildRun() {
   if (!lgCan()) return;
   const games = poGames(), left = regular().filter(m => !lgDone(m)).length;
