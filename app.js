@@ -104,7 +104,7 @@ function renderHome() {
   const el = $("#nextMatch");
   if (!fav) { el.innerHTML = `<span class="hint">Выберите клуб в настройках ⚙</span>`; }
   else {
-    const m = MATCHES.filter(m => (m.hs === null || m.live) && (m.home === fav.id || m.away === fav.id)).sort((a, b) => (a.tour || 0) - (b.tour || 0) || (a.date || "").localeCompare(b.date || ""))[0];
+    const m = MATCHES.filter(m => m.stage !== "tournament" && (m.hs === null || m.live) && (m.home === fav.id || m.away === fav.id)).sort((a, b) => (a.tour || 0) - (b.tour || 0) || (a.date || "").localeCompare(b.date || ""))[0];
     el.innerHTML = m ? matchHtml(m) : `<span class="hint">У клуба «${fav.name}» пока нет запланированных матчей</span>`;
   }
   $("#homeNews").innerHTML = sortedNews().slice(0, 4).map(newsCard).join("");
@@ -162,7 +162,7 @@ function renderBig() {
   $("#bigMatch").innerHTML = top.map(m => `<p class="bigNote">🔥 Всего шайб: <b>${tot(m)}</b></p>${matchHtml(m)}`).join("");
 }
 
-const matchKey = m => m.tour ? `t${m.tour}-${m.home}-${m.away}` : null;
+const matchKey = m => m.key || (m.tour ? `t${m.tour}-${m.home}-${m.away}` : null);
 // Готовые составы из data.js (PRESET_LINEUPS) подставляются, если на сайте для матча ещё нет сохранённого состава
 function withPresets(lu) {
   if (typeof PRESET_LINEUPS === "undefined") return lu;
@@ -195,7 +195,7 @@ function lineupChip(m) {
 }
 function matchHtml(m) {
   const sc = m.hs === null ? "—" : `${m.hs}:${m.as}${m.ot ? `<br><small>${typeof m.ot === "string" ? m.ot : "ОТ"}</small>` : ""}`;
-  const when = m.date ? `${fmtDate(m.date)} · ${m.time}` : `Тур ${m.tour}`;
+  const when = m.date ? `${fmtDate(m.date)} · ${m.time}` : (m.tag || `Тур ${m.tour}`);
   const lab = (m.live ? `<div class="lab live">● Идёт${m.period ? " · " + (m.period === "ОТ" || m.period === "Б" ? m.period : m.period + "-й период") : ""}</div>` : "") + (m.label ? `<div class="lab">${m.label}</div>` : "");
   const key = matchKey(m);
   return `<div class="match${m.label ? " derby" : ""}${m.live ? " live" : ""}${key ? " clickable" : ""}"${key ? ` data-mk="${key}"` : ""}>${lab}<div class="d">${when}</div>${tmHtml(T(m.home))}<div class="sc">${sc}</div>${tmHtml(T(m.away), true)}${lineupChip(m)}</div>`;
@@ -204,14 +204,15 @@ const regular = () => MATCHES.filter(m => m.stage === "regular");
 const tourCount = () => Math.max(0, ...regular().map(m => m.tour || 0));
 function renderSchedule() {
   const bar = $("#tourBar");
+  const pt = $("#poTools"); if (pt) pt.innerHTML = ui.schStage === "playoff" ? poToolsHtml() : "";
   if (ui.schStage !== "regular") {
     bar.style.display = "none";
-    const l = MATCHES.filter(m => m.stage === ui.schStage);
-    $("#schList").innerHTML = l.length ? l.map(matchHtml).join("") : `<p class="hint">Матчей плей-офф пока нет</p>`;
+    $("#schList").innerHTML = poListHtml();
     return;
   }
   bar.style.display = "";
   const fb = $("#fillBtn"); if (fb) fb.style.display = isAdmin() ? "" : "none";
+  const sb = $("#simBtn"); if (sb) sb.style.display = isAdmin() ? "" : "none";
   const n = tourCount();
   if (ui.tour === null) {
     const open = regular().find(m => m.hs === null || m.live);
@@ -234,6 +235,7 @@ function standingsTable(conf) {
 function renderTable() {
   const el = $("#tableBody");
   if (ui.tabStage === "regular") { el.innerHTML = `<div class="two">${standingsTable("west")}${standingsTable("east")}</div>`; return; }
+  if (poHas()) { el.innerHTML = poBracketHtml(); return; }   // сетка собирается из матчей плей-офф
   const seeded = typeof PLAYOFF_SEEDS !== "undefined" && ["west", "east"].some(c => (PLAYOFF_SEEDS[c] || []).length === 8);
   if (!seeded) { el.innerHTML = `<p class="hint" style="margin-top:18px">Сетка плей-офф появится после завершения регулярного чемпионата.</p>`; return; }
   const names = ["1/4 финала", "1/2 финала", "Финал конф."];
@@ -302,7 +304,7 @@ function clubSeason(id) {
   const t = T(id), rows = standings(t.conf), i = rows.findIndex(r => r.t && r.t.id === id), r = rows[i] || { gp: 0, w: 0, otw: 0, pts: 0 };
   const ord = m => (m.stage === "regular" ? 0 : 1e4) + (m.tour || 0);
   const byTime = (a, b) => ord(a) - ord(b) || (a.date || "").localeCompare(b.date || "");
-  const mine = MATCHES.filter(m => m.home === id || m.away === id);
+  const mine = MATCHES.filter(m => m.stage !== "tournament" && (m.home === id || m.away === id));
   const done = mine.filter(m => m.hs !== null && !m.live).sort(byTime);
   const reg = done.filter(m => m.stage === "regular");
   let gf = 0, ga = 0;
@@ -317,7 +319,7 @@ function clubSeason(id) {
 }
 function clubMatchHtml(m) {
   const key = matchKey(m), played = m.hs !== null;
-  const lab = m.tour ? `Тур ${m.tour}` : (m.label || "Плей-офф");
+  const lab = m.tag || (m.tour ? `Тур ${m.tour}` : (m.label || "Плей-офф"));
   const ot = played && m.ot ? `<small>${typeof m.ot === "string" ? m.ot : "ОТ"}</small>` : "";
   return `<div class="cm${key ? " clickable" : ""}"${key ? ` data-mk="${key}"` : ""}><div class="ct">${lab}</div><div class="cr">${tmHtml(T(m.home))}<div class="cs${played ? "" : " vs"}">${played ? m.hs + ":" + m.as : "vs"}${ot}</div>${tmHtml(T(m.away), true)}</div></div>`;
 }
@@ -352,7 +354,7 @@ function applyAccent() {
   const fav = state.fav && T(state.fav);
   document.documentElement.style.setProperty("--accent", fav && state.color !== false ? fav.color : BASE_ACCENT);
 }
-function renderAll() { applyAccent(); renderHome(); renderSchedule(); renderTable(); renderStats(); renderClubs(); renderMedia(); }
+function renderAll() { applyAccent(); renderHome(); renderSchedule(); renderTable(); renderTournaments(); renderStats(); renderClubs(); renderMedia(); }
 
 function go(view) {
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === view));
@@ -900,7 +902,7 @@ function statsData() {
     return r;
   };
   Object.entries(LM).forEach(([key, d]) => {
-    const m = byKey.get(key); if (!m || !d || !Array.isArray(d.goals)) return;
+    const m = byKey.get(key); if (!m || m.stage === "tournament" || !d || !Array.isArray(d.goals)) return;
     d.goals.forEach(g => {
       const team = g.team === "away" ? m.away : m.home;
       // новые голы хранят sc/as; старые (введённые текстом) разбираются из p/a
@@ -983,13 +985,22 @@ async function initBackend() {
     // живые матчи: статус «Идёт», счёт и итог (пишет только создатель)
     Backend.db.collection("matches").onSnapshot(snap => {
       LM = {}; snap.forEach(d => { LM[d.id] = d.data(); });
-      applyLive(); renderHome(); renderSchedule(); renderTable(); renderStats();
+      applyLive(); renderHome(); renderSchedule(); renderTable(); renderTournaments(); renderStats();
       refreshModal();
     }, err => console.warn("matches", err));
+    // матчи плей-офф и турниров (создаёт создатель): сами матчи, а счёт и голы лежат в matches
+    Backend.db.collection("games").onSnapshot(snap => {
+      lgSyncGames(snap);
+      renderHome(); renderSchedule(); renderTable(); renderTournaments(); renderStats();
+      refreshModal();
+    }, err => console.warn("games", err));
+    Backend.db.collection("tournaments").onSnapshot(snap => {
+      lgSyncTournaments(snap); renderTournaments();
+    }, err => console.warn("tournaments", err));
     Backend.auth.onAuthStateChanged(u => {
       Backend.user = u; const first = !Backend.authKnown; Backend.authKnown = true;
       if (first && state.role === "coach" && !u) { delete state.role; save(); applyRole(); entryModal(); }
-      applyRole(); renderSchedule(); watchCreds();
+      applyRole(); renderSchedule(); renderTable(); renderTournaments(); watchCreds();
     });
     return true;
   } catch (e) { console.warn("Firebase не подключился", e); Backend.authKnown = true; return false; }
@@ -1154,7 +1165,7 @@ function matchModal(key) {
   const d = LM[key], started = isStarted(d);
   const score = m.hs === null ? "" : `<div class="mscore${m.live ? " live" : ""}"><div class="big">${m.hs}:${m.as}</div><small>${m.live ? "● Идёт" : "Завершён" + (m.ot ? " · " + (typeof m.ot === "string" ? m.ot : "ОТ") : "")}</small>${started ? periodsHtml(d, isAdmin() && d.status === "live") : ""}</div>`;
   const goals = goalsHtml(d, isAdmin());
-  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">Тур ${m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${canClick ? `<p class="hint">Нажмите на игрока в составе, чтобы заменить его на похожего.</p>` : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
+  openModal(`${watch}<h3>${esc(H.name)} — ${esc(A.name)}</h3><p class="hint">${m.tag ? esc(m.tag) : "Тур " + m.tour}${m.label ? " · " + esc(m.label) : ""}</p>${head}${score}${isAdmin() ? adminPanel(key, m) : ""}${isAdmin() ? ytAdmin(key, d) : ""}${goals}${isAdmin() ? goalsAdmin(m, d) : ""}${canClick ? `<p class="hint">Нажмите на игрока в составе, чтобы заменить его на похожего.</p>` : ""}${body}${info ? `<p class="hint" style="margin-top:10px">${info}</p>` : ""}${edit}`);
   currentMatch = key;
 }
 
@@ -1223,7 +1234,7 @@ function edMain() {
     return `<button class="btn big pickbtn" data-pick="${pos}" type="button"><span>${POSN[pos]}</span><b>${sel.length} из ${ed.rows[pos].length || 0} ›</b></button>` +
       (sel.length ? `<div class="sel">${sel.map(p => `<span><b>${esc(p.n)}</b> ${esc(splitName(p.name)[0])}</span>`).join("")}</div>` : "");
   }).join("");
-  openModal(`<h3>Состав: ${T(ed.my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, тур ${m.tour}</p>
+  openModal(`<h3>Состав: ${T(ed.my).name}</h3><p class="hint">${T(m.home).name} — ${T(m.away).name}, ${m.tag ? esc(m.tag) : "тур " + m.tour}</p>
     <input class="inp" id="eSearch" type="search" placeholder="🔍 Поиск игрока: номер, имя или фамилия" autocomplete="off">
     <div id="eFound"></div>
     ${ed.note ? `<p class="hint note">${esc(ed.note)}</p>` : ""}
