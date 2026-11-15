@@ -245,8 +245,13 @@ function poListHtml() {
 }
 async function poBuildRun() {
   if (!lgCan()) return;
-  const games = poGames();
-  if (!games.length && !confirm("Составить сетку плей-офф по текущей турнирной таблице (8 лучших клубов каждой конференции)?")) return;
+  const games = poGames(), left = regular().filter(m => !lgDone(m)).length;
+  if (!games.length) {
+    const ask = left
+      ? `Регулярный чемпионат ещё не закончен: не сыграно матчей — ${left}. Сетка составится по ТЕКУЩЕЙ таблице и может не совпасть с итоговой. Всё равно составить?`
+      : "Составить сетку плей-офф по итоговой таблице сезона? 1-е место играет с 8-м, 2-е с 7-м, 3-е с 6-м, 4-е с 5-м (внутри своей конференции).";
+    if (!confirm(ask)) return;
+  }
   await lgGuard(async () => {
     const r = poBuild(games);
     if (!r.out.length) { lgToast(r.msg); return; }
