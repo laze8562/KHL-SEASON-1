@@ -474,3 +474,5 @@ body.lgbusy .btn, body.lgbusy .fillBtn { opacity: .6; pointer-events: none; }
 .serHead b { color: var(--accent); font-size: 20px; letter-spacing: .04em; }
 .serHead.end { border-color: var(--accent); }
 .serHead small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.netnote { background: #3a2a05; color: #ffd27a; border-bottom: 1px solid #6b4d0a; padding: 8px 14px; font-size: 13px; text-align: center; }

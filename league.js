@@ -163,13 +163,48 @@ async function lgSimTour() {
 // ======================================================================
 function lgSyncGames(snap) {
   for (let i = MATCHES.length - 1; i >= 0; i--) if (MATCHES[i].dyn) MATCHES.splice(i, 1);
+  LG.rawGames = [];
   snap.forEach(d => {
-    const g = d.data();
+    const g = d.data(); LG.rawGames.push({ ...g, __id: d.id });
     // подпись пересчитываем, чтобы у матчей, созданных до переименования раундов, она тоже была верной
     MATCHES.push({ ...g, key: g.key || d.id, dyn: true, label: "", hs: null, as: null, ot: false, ...(g.stage === "playoff" && g.round !== undefined ? { tag: poTag(g) } : {}) });
   });
   applyLive();
 }
+// ---------- Работа при недоступном сервере (блокировки, плохая сеть) ----------
+// Последние полученные данные лежат в памяти браузера: при следующем заходе сайт сразу показывает их,
+// а свежие подгружаются, как только сервер ответит. Если ответа нет, вверху показывается плашка.
+const LG_CACHE = "khl-s1-cache";
+let lgCacheT = 0;
+function lgCacheSave() {
+  clearTimeout(lgCacheT);
+  lgCacheT = setTimeout(() => {
+    const lu = {}; Object.entries(LU).forEach(([k, v]) => { if (v && !v.preset) lu[k] = v; });
+    const pack = withLu => JSON.stringify({ at: Date.now(), LM, LU: withLu ? lu : {}, games: LG.rawGames || [], TN });
+    try { localStorage.setItem(LG_CACHE, pack(true)); }
+    catch (_) { try { localStorage.setItem(LG_CACHE, pack(false)); } catch (__) {} }   // не хватило места — храним без составов
+  }, 1500);
+}
+function lgCacheLoad() {
+  try {
+    const c = JSON.parse(localStorage.getItem(LG_CACHE) || "null"); if (!c) return;
+    LM = c.LM || {}; LU = c.LU || {}; TN = c.TN || {};
+    lgSyncGames({ forEach: f => (c.games || []).forEach(g => f({ id: g.__id, data: () => g })) });
+    applyLive(); LG.cached = c.at || 0;
+  } catch (_) {}
+}
+function lgNetNote(show) {
+  let el = document.getElementById("netNote");
+  if (!show) { if (el) el.remove(); return; }
+  if (el || LG.live) return;
+  el = document.createElement("div"); el.id = "netNote"; el.className = "netnote";
+  const when = LG.cached ? ` Показаны данные от ${new Date(LG.cached).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.` : "";
+  el.textContent = "Нет связи с сервером результатов." + when + " Проверьте интернет или попробуйте другую сеть.";
+  document.body.prepend(el);
+}
+function lgLive() { LG.live = true; lgNetNote(false); }
+setTimeout(() => lgNetNote(true), 15000);   // если за 15 секунд сервер не ответил, показываем плашку
+
 function lgSyncTournaments(snap) {
   TN = {}; snap.forEach(d => { TN[d.id] = d.data(); });
   if (ui.tid && !TN[ui.tid]) ui.tid = null;

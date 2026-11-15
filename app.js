@@ -962,9 +962,10 @@ function renderStats() {
     : `<p class="hint" style="margin-top:18px">Пока никто не забивал. Статистика появится, когда в карточках матчей будут внесены голы и передачи.</p>`;
 }
 
-function loadScript(src) {
+function loadScript(src, ms = 12000) {   // если площадка недоступна (блокировка), через ms секунд сдаёмся, а не висим
   return new Promise((ok, fail) => {
-    const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => fail(new Error("load " + src));
+    const s = document.createElement("script"), t = setTimeout(() => { s.remove(); fail(new Error("timeout " + src)); }, ms);
+    s.src = src; s.onload = () => { clearTimeout(t); ok(); }; s.onerror = () => { clearTimeout(t); fail(new Error("load " + src)); };
     document.head.appendChild(s);
   });
 }
@@ -976,26 +977,28 @@ async function initBackend() {
     await loadScript(SDK + "firebase-storage-compat.js").catch(() => {});   // хранилище видео; если не загрузилось, остальное работает
     firebase.initializeApp(FIREBASE_CONFIG);
     Backend.auth = firebase.auth(); Backend.db = firebase.firestore(); Backend.ready = true;
+    // в сетях, где потоковое соединение режется, Firestore сам переключится на обычные запросы
+    try { Backend.db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (_) {}
     try { Backend.storage = firebase.storage(); } catch (_) { Backend.storage = null; }
     Backend.db.collection("lineups").onSnapshot(snap => {
       LU = {}; snap.forEach(d => { LU[d.id] = d.data(); }); LU = withPresets(LU);
       renderSchedule(); renderHome(); renderStats();
-      refreshModal();
-    }, err => console.warn("lineups", err));
+      refreshModal(); lgLive(); lgCacheSave();
+    }, err => { console.warn("lineups", err); lgNetNote(true); });
     // живые матчи: статус «Идёт», счёт и итог (пишет только создатель)
     Backend.db.collection("matches").onSnapshot(snap => {
       LM = {}; snap.forEach(d => { LM[d.id] = d.data(); });
       applyLive(); renderHome(); renderSchedule(); renderTable(); renderTournaments(); renderStats();
-      refreshModal();
-    }, err => console.warn("matches", err));
+      refreshModal(); lgLive(); lgCacheSave();
+    }, err => { console.warn("matches", err); lgNetNote(true); });
     // матчи плей-офф и турниров (создаёт создатель): сами матчи, а счёт и голы лежат в matches
     Backend.db.collection("games").onSnapshot(snap => {
       lgSyncGames(snap);
       renderHome(); renderSchedule(); renderTable(); renderTournaments(); renderStats();
-      refreshModal();
+      refreshModal(); lgCacheSave();
     }, err => console.warn("games", err));
     Backend.db.collection("tournaments").onSnapshot(snap => {
-      lgSyncTournaments(snap); renderTournaments();
+      lgSyncTournaments(snap); renderTournaments(); lgCacheSave();
     }, err => console.warn("tournaments", err));
     Backend.auth.onAuthStateChanged(u => {
       Backend.user = u; const first = !Backend.authKnown; Backend.authKnown = true;
@@ -1003,7 +1006,7 @@ async function initBackend() {
       applyRole(); renderSchedule(); renderTable(); renderTournaments(); watchCreds();
     });
     return true;
-  } catch (e) { console.warn("Firebase не подключился", e); Backend.authKnown = true; return false; }
+  } catch (e) { console.warn("Firebase не подключился", e); Backend.authKnown = true; lgNetNote(true); return false; }
 }
 const signOutCoach = () => { if (Backend.auth && Backend.user) Backend.auth.signOut(); };
 const ADMIN_LOGIN = "admin";   // логин создателя: admin@khl-s1.app (то же имя зашито в firestore.rules)
@@ -1513,6 +1516,7 @@ document.addEventListener("input", e => {
 musicSync();
 
 // ---------- Запуск ----------
+lgCacheLoad();   // последние известные результаты из памяти браузера: сайт не пустой, даже если сервер недоступен
 LU = withPresets(LU);
 renderAll();
 applyLogo();
