@@ -449,3 +449,22 @@ td.act .btn { margin-right: 4px; }
 .fbtns .btn { margin: 0; }
 .fbtns .btn:disabled { opacity: .5; }
 .tourbar { flex-wrap: wrap; }
+
+/* ---------- Симуляция, турниры, плей-офф ---------- */
+.lgtoast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 100000; max-width: min(92vw, 520px); background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 18px; font-size: 15px; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
+body.lgbusy { cursor: progress; }
+body.lgbusy .btn, body.lgbusy .fillBtn { opacity: .6; pointer-events: none; }
+.tcard { cursor: pointer; }
+.tcard:hover { border-color: var(--accent); }
+.tcard h4 { margin-bottom: 4px; }
+.tnTitle { margin: 14px 0 2px; font-size: 20px; }
+.tnAdm { margin: 6px 0 10px; }
+.tnteams .frow { margin-bottom: 6px; }
+.twq { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.twq .btn { margin: 0; }
+.twm { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.twm span { flex: 1; min-width: 0; }
+.twm select.inp { width: auto; margin: 0; }
+.twg { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.twg .chip { margin: 4px 4px 0 0; }
+.btn:disabled { opacity: .45; cursor: default; }

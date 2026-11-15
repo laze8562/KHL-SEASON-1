@@ -32,6 +32,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Матчи плей-офф и турниров (сами игры): читают все, пишет только создатель.
+    // Счёт, голы и периоды этих матчей лежат в matches/<матч>, составы — в lineups.
+    match /games/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Турниры (название, команды, группы): читают все, пишет только создатель
+    match /tournaments/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Логины и пароли тренеров: видит и меняет только создатель
     match /credentials/{id} {
       allow read, write: if isAdmin();
