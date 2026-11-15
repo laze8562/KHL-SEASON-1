@@ -346,6 +346,7 @@ function settingsModal() {
     <div class="set"><label><input type="checkbox" id="musicOn" ${musicOn() ? "checked" : ""}> 🎵 Фоновая музыка</label>
       <label class="vol">Громкость <input type="range" id="musicVol" min="0" max="100" value="${Math.round(musicVol() * 100)}"><span id="musicVolV">${Math.round(musicVol() * 100)}%</span></label></div>
     <div class="set links"><div class="hint">Мы в соцсетях</div>${LEAGUE.socials.map(s => `<a href="${s.u}" target="_blank" rel="noopener">${s.t}</a>`).join("")}</div>
+    ${isAdmin() ? lgMtSetting() : ""}
     <div class="set">${isAdmin() ? "Вы вошли как <b>создатель лиги</b>" : coachTeam() ? "Вы вошли как тренер: <b>" + T(coachTeam()).name + "</b>" : "Вы заходите как болельщик"}<br><button class="btn ghost" id="roleBtn">${coachTeam() || isAdmin() ? "Выйти" : "Сменить роль"}</button></div>
     <div class="set"><div class="hint">Сброс — вернуть все настройки по умолчанию</div><button class="btn ghost" id="reset">Сбросить всё</button></div>`);
 }
@@ -1031,6 +1032,7 @@ function applyRole() {
   const back = $("#backAdm"); if (back) back.style.display = asCoach && id ? "" : "none";
   applyLogo();
   renderTicker();
+  lgMtRender();
   if (!adm && $("#access").classList.contains("on")) go("home");
 }
 
@@ -1493,7 +1495,7 @@ bgm.loop = true; bgm.preload = "auto"; bgm.volume = musicVol();
 let bgmHold = 0;   // >0 — музыка временно на паузе (идёт видео гола)
 function musicSync() {
   bgm.volume = musicVol();
-  if (musicOn() && !bgmHold && !document.hidden) { const p = bgm.play(); if (p && p.catch) p.catch(() => {}); }
+  if (musicOn() && !bgmHold && !document.hidden && !document.body.classList.contains("mt")) { const p = bgm.play(); if (p && p.catch) p.catch(() => {}); }
   else bgm.pause();
 }
 function musicSet(patch) { state.music = { on: musicOn(), vol: musicVol(), ...patch }; save(); musicSync(); }
@@ -1517,6 +1519,7 @@ musicSync();
 
 // ---------- Запуск ----------
 lgCacheLoad();   // последние известные результаты из памяти браузера: сайт не пустой, даже если сервер недоступен
+lgMtRender();    // если при прошлом заходе были технические работы, картинка видна сразу
 LU = withPresets(LU);
 renderAll();
 applyLogo();

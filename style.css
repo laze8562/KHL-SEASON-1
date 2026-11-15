@@ -476,3 +476,11 @@ body.lgbusy .btn, body.lgbusy .fillBtn { opacity: .6; pointer-events: none; }
 .serHead small { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 .netnote { background: #3a2a05; color: #ffd27a; border-bottom: 1px solid #6b4d0a; padding: 8px 14px; font-size: 13px; text-align: center; }
+
+/* ---------- Режим технических работ ---------- */
+#maint { display: none; position: fixed; inset: 0; z-index: 100000; background: #04060a; align-items: center; justify-content: center; padding: 16px; }
+body.mt #maint { display: flex; }
+body.mt.mtlogin #maint { display: none; }
+body.mt { overflow: hidden; }
+body.mt:not(.mtlogin) #overlay { display: none !important; }
+#maint img { width: min(100%, 640px); height: auto; border-radius: 12px; user-select: none; -webkit-user-drag: none; }

@@ -202,7 +202,42 @@ function lgNetNote(show) {
   el.textContent = "Нет связи с сервером результатов." + when + " Проверьте интернет или попробуйте другую сеть.";
   document.body.prepend(el);
 }
-function lgLive() { LG.live = true; lgNetNote(false); }
+function lgLive() { LG.live = true; lgNetNote(false); lgMtRender(); }
+
+// ======================================================================
+//  РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ
+//  Включает создатель (⚙ Настройки). Флаг лежит в базе: matches/_maintenance.
+//  Пока режим включён, болельщики и тренеры видят только картинку maintenance.jpg, а создатель работает как обычно.
+//  Чтобы создатель мог войти, если вышел из аккаунта: нажать на картинку 5 раз подряд.
+// ======================================================================
+const lgMtOn = () => !!(LM._maintenance && LM._maintenance.on);
+function lgMtRender() {
+  const on = lgMtOn(), block = on && !isAdmin();
+  document.body.classList.toggle("mt", block);
+  if (!block) document.body.classList.remove("mtlogin");
+  const a = document.getElementById("mtAdm"); if (a) a.style.display = on && isAdmin() ? "" : "none";
+  try { musicSync(); } catch (_) {}
+}
+const lgMtSetting = () => `<div class="set"><label><input type="checkbox" id="mtOn"${lgMtOn() ? " checked" : ""}> 🛠 Режим технических работ</label>
+  <div class="hint">Когда включён, болельщики и тренеры видят только картинку «Технические шоколадки». Вы, как создатель, пользуетесь сайтом как обычно.</div></div>`;
+async function lgMtSet(on, box) {
+  if (!isAdmin() || !Backend.db) { if (box) box.checked = !on; lgToast("Нет связи с сервером. Включить режим работ не получилось."); return; }
+  try {
+    await Backend.db.collection("matches").doc("_maintenance").set({ on, updatedAt: lgStamp() });
+    lgToast(on ? "Режим работ включён: все, кроме создателя, видят только картинку" : "Режим работ выключен: сайт снова открыт для всех");
+  } catch (e) { if (box) box.checked = !on; lgToast("Не удалось сохранить. Проверьте вход создателя и интернет."); }
+}
+// 5 нажатий на картинку подряд (в пределах 4 секунд) открывают вход
+let lgMtTaps = [];
+document.addEventListener("click", e => {
+  if (!e.target.closest("#maint")) return;
+  const now = Date.now(); lgMtTaps = lgMtTaps.filter(t => now - t < 4000).concat(now);
+  if (lgMtTaps.length >= 5) { lgMtTaps = []; document.body.classList.add("mtlogin"); coachLoginModal(); }
+});
+setInterval(() => {   // вход закрыли, не войдя: возвращаем картинку
+  if (document.body.classList.contains("mtlogin") && !document.getElementById("overlay").classList.contains("on")) document.body.classList.remove("mtlogin");
+  if (document.body.classList.contains("mt")) lgMtRender();
+}, 500);
 setTimeout(() => lgNetNote(true), 15000);   // если за 15 секунд сервер не ответил, показываем плашку
 
 function lgSyncTournaments(snap) {
@@ -625,5 +660,6 @@ document.addEventListener("change", e => {
   else if (TW && t.id === "twN") { TW.n = +t.value; if (TW.how === "rand") TW.rand = twShuffle(twSel(), TW.n); TW.manual = {}; twRender(); }
   else if (TW && t.matches && t.matches("[data-tw-man]")) { TW.manual[t.dataset.twMan] = +t.value; twRender(); }
   else if (t.id === "tnTourSel") { ui.ttour = +t.value; renderTournaments(); }
+  else if (t.id === "mtOn") lgMtSet(t.checked, t);
 });
 document.addEventListener("input", e => { if (TW && e.target.id === "twName") TW.name = e.target.value; });
